@@ -10,7 +10,7 @@ import streamlit as st
 from data_access import ROOT, SOURCES, load_local, load_sheets, local_available
 from model import DataError, UNKNOWN, build_dataset, evolution_statistics, group_statistics, label_period, general_consumption_trend, critical_consumption
 from charts import evolution_chart, individual_history_chart
-from characterization import render_characterization
+from characterization import render_characterization, render_linked_household
 from neighborhoods import render_neighborhoods
 
 st.set_page_config(page_title="EdERSA · Explorador", page_icon="◉", layout="wide")
@@ -114,7 +114,7 @@ with st.sidebar:
 
 try:
     with st.spinner("Relacionando usuarios, barrios y consumos…"):
-        dataset, fetched_at = cached_load(mode, "neighborhoods-ambientes-v2")
+        dataset, fetched_at = cached_load(mode, "household-details-roof-v3")
 except DataError as exc:
     source_controls(options, mode)
     st.error(str(exc))
@@ -379,8 +379,7 @@ elif section == "Usuarios y fichas":
         st.caption("Sin encuesta residencial con NIS confirmado para este usuario. La caracterización territorial completa está disponible en Caracterización de hogares.")
     else:
         survey_row = household_surveys.iloc[0]
-        attributes = {"Fecha de encuesta": str(survey_row.fecha_encuesta.date()) if pd.notna(survey_row.fecha_encuesta) else "Sin fecha", "Personas declaradas": fmt(survey_row.personas_cantidad), "Mayores declarados": fmt(survey_row.personas_mayores_edad_cantidad), "Menores derivados": fmt(survey_row.menores_derivados), "Familias declaradas": fmt(survey_row.familias_cantidad), "Superficie · m²": fmt(survey_row.superficie_construida), "Estado general": survey_row.vivienda_estado_general, "Puesta a tierra": survey_row.puesta_tierra_hay, "Filtraciones de aire": survey_row.vivienda_aberturas_filtraciones}
-        st.dataframe(pd.DataFrame(attributes.items(), columns=["Variable", "Última encuesta vinculada"]), hide_index=True, width="stretch")
+        render_linked_household(survey_row)
         st.caption(f"{len(household_surveys)} encuestas asociadas por NIS. Se muestra la más reciente; el suministro puede corresponder a más de una vivienda.")
 
 elif section == "Comparar grupos":

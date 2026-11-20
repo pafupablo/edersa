@@ -40,6 +40,101 @@ def cards(items, class_name="survey-cards"):
     st.markdown(f'<div class="{class_name}">{content}</div>', unsafe_allow_html=True)
 
 
+def linked_household_html(row):
+    """Residential survey facts, with explicit unknowns and counted equipment."""
+    def value(field):
+        raw = row.get(field)
+        return "Sin dato" if raw is None or pd.isna(raw) or str(raw).strip()=="" else str(raw).replace("_"," ").strip()
+    def binary(field):
+        answer = yes_no(row.get(field))
+        return "Sí" if answer is True else "No" if answer is False else "Sin dato"
+    def number(field):
+        return fmt(pd.to_numeric(row.get(field),errors="coerce"))
+    def card(label, content, note="", icons="", tone=""):
+        return f'<div class="linked-card {tone}"><div class="linked-label">{html.escape(label)}</div><div class="linked-value">{html.escape(str(content))}</div><div class="linked-icons" aria-hidden="true">{html.escape(icons)}</div><p>{html.escape(note)}</p></div>'
+    def equipment(label, quantity_field, icon, presence_field=None):
+        quantity = pd.to_numeric(row.get(quantity_field),errors="coerce")
+        presence = yes_no(row.get(presence_field)) if presence_field else None
+        if pd.notna(quantity) and quantity>=0 and float(quantity).is_integer():
+            count = int(quantity)
+            icons = " ".join([icon]*min(count,12)) + (f" +{count-12}" if count>12 else "")
+            note = "Un ícono por equipo declarado." if count else "No tiene equipos declarados."
+            if presence is False and count>0 or presence is True and count==0:
+                note = "Revisar: la cantidad y la respuesta de presencia no coinciden."
+            return card(label,str(count),note,icons)
+        if presence is False:
+            return card(label,"0","No tiene, según la encuesta.")
+        return card(label,"Tiene" if presence is True else "Sin dato","Cantidad no informada.",icon if presence is True else "")
+    def presence(label,field,icon):
+        answer = binary(field)
+        return card(label,answer,"Presencia declarada; la encuesta no releva cantidad.",icon if answer=="Sí" else "")
+
+    ratio = pd.to_numeric(row.get("personas_por_ambiente"),errors="coerce")
+    crowded = pd.notna(ratio) and ratio>3
+    crowd_label = "Hacinamiento crítico" if crowded else "Sin hacinamiento crítico" if pd.notna(ratio) else "Sin dato"
+    occupancy = '<div class="linked-grid">'+''.join([
+        card("Personas en el hogar",number("personas_cantidad"),f'Mayores: {number("personas_mayores_edad_cantidad")} · Menores: {number("menores_derivados")}'),
+        card("Superficie construida",number("superficie_construida")+" m²" if value("superficie_construida")!="Sin dato" else "Sin dato"),
+        card("Ambientes",number("ambientes_totales"),"Se cuentan todos los ambientes, no solo dormitorios."),
+        card("Personas por ambiente",fmt(ratio,1),crowd_label+" · crítico si supera 3 personas/ambiente.",tone="linked-alert" if crowded else ""),
+        card("Estado general",value("vivienda_estado_general")),
+        card("Familias declaradas",number("familias_cantidad")),
+    ])+'</div>'
+    water = binary("energia_calefaccion_agua/Electricidad")
+    if water=="Sin dato" and "electricidad" in value("energia_calefaccion_agua").casefold():
+        water="Sí"
+    equipment_cards = '<div class="linked-grid">'+''.join([
+        equipment("Aires acondicionados","aire_acondicionado_cantidad","❄️","aire_acondicionado_hay"),
+        equipment("Estufas / calefactores eléctricos","calefactor_electrico_cantidad","🔥"),
+        presence("Estufa a gas","estufa_gas","🔥"),
+        presence("Estufa a leña","estufa_lena","🪵"),
+        card("Agua caliente con electricidad",water,"Fuentes declaradas: "+value("energia_calefaccion_agua"),"⚡" if water=="Sí" else ""),
+        card("Equipos para agua caliente",f'Termotanque eléctrico: {binary("termotanque_electrico_hay")}',f'Ducha eléctrica: {binary("ducha_electrica")} · Termotanque a gas: {binary("termotanque_gas_hay")}'),
+    ])+'</div>'
+    materials = '<div class="linked-grid linked-materials">'+''.join(card(label,value(field)) for label,field in [
+        ("Techo exterior","vivienda_techo_exterior_material"),
+        ("Techo interior · componentes","vivienda_techo_interior_material"),
+        ("Pared externa","vivienda_pared_material"),
+        ("Piso","vivienda_piso_material"),
+    ])+'</div>'
+    board = value("tablero_hay")
+    board_key = board.casefold()
+    disconnector = "Sí, declarado" if "disyuntor" in board_key else "No, solo térmicas" if "solo" in board_key and ("termica" in board_key or "térmica" in board_key) else "No, sin tablero" if board_key=="no" else "Tablero completo declarado" if "completo" in board_key else "Sin dato específico"
+    protections = '<div class="linked-grid">'+''.join([
+        card("Disyuntor",disconnector,"El formulario describe el tablero; no releva cantidad de disyuntores."),
+        card("Tablero eléctrico",board),
+        card("Puesta a tierra",binary("puesta_tierra_hay")),
+        card("Cortes de electricidad",value("cortes_electricidad")),
+    ])+'</div>'
+    problem_cards = []
+    for field,label in PROBLEMS.items():
+        answer = binary(field)
+        problem_cards.append(card(label,answer,tone="linked-alert" if answer=="Sí" else ""))
+    problems = '<div class="linked-grid">'+''.join(problem_cards)+'</div>'
+    date = row.get("fecha_encuesta")
+    date_label = pd.Timestamp(date).strftime("%d/%m/%Y") if pd.notna(date) else "Sin fecha"
+    return '<div class="linked-household"><div class="linked-heading">Encuesta del '+html.escape(date_label)+'</div><h4>El hogar y sus espacios</h4>'+occupancy+'<h4>Climatización y agua caliente</h4>'+equipment_cards+'<h4>Materialidad de la vivienda</h4>'+materials+'<h4>Protecciones e instalación eléctrica</h4>'+protections+'<h4>Problemas eléctricos declarados</h4>'+problems+'</div>'
+
+
+def render_linked_household(row):
+    st.markdown('''<style>
+    .linked-household{margin:12px 0 24px;color:#234B7B}
+    .linked-household h4{margin:25px 0 12px;font-size:1.05rem}
+    .linked-heading{border-left:4px solid #FFC600;background:#EAF0F8;padding:12px 16px;border-radius:0 8px 8px 0;font-weight:600}
+    .linked-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .linked-card{border:1px solid #DFE7F0;background:white;border-radius:12px;padding:16px;overflow-wrap:anywhere}
+    .linked-label{color:#64798B;font-size:.8rem;margin-bottom:7px}
+    .linked-value{font-weight:650;font-size:1.12rem;line-height:1.4}
+    .linked-card p{font-size:.76rem;color:#64798B;margin:6px 0 0;line-height:1.5}
+    .linked-icons{font-size:1.45rem;line-height:1.7;word-spacing:5px}
+    .linked-alert{background:#FFF0F0;border-color:#EDB4B8}.linked-alert .linked-value{color:#A62D35}
+    .linked-materials{grid-template-columns:repeat(4,minmax(0,1fr))}
+    @media(max-width:1100px){.linked-grid,.linked-materials{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:420px){.linked-grid,.linked-materials{grid-template-columns:1fr}}
+    </style>''',unsafe_allow_html=True)
+    st.markdown(linked_household_html(row),unsafe_allow_html=True)
+
+
 def categorical(values, title, key, aliases=None, order=None, height=290, donut=False):
     st.markdown(f"#### {title}")
     clean = values.dropna().astype(str).str.strip()

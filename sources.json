@@ -99,7 +99,8 @@
       "acceso_servicios/Agua_de_red",
       "acceso_servicios/Cloaca_pública",
       "acceso_servicios/Gas_de_red",
-      "acceso_servicios/Red_eléctrica"
+      "acceso_servicios/Red_eléctrica",
+      "vivienda_techo_interior_material"
     ],
     "value_render_option": "UNFORMATTED_VALUE"
   },
