@@ -51,7 +51,7 @@ def linked_household_html(row):
     def number(field):
         return fmt(pd.to_numeric(row.get(field),errors="coerce"))
     def card(label, content, note="", icons="", tone=""):
-        return f'<div class="linked-card {tone}"><div class="linked-label">{html.escape(label)}</div><div class="linked-value">{html.escape(str(content))}</div><div class="linked-icons" aria-hidden="true">{html.escape(icons)}</div><p>{html.escape(note)}</p></div>'
+        return f'<div class="linked-card {tone}"><div class="linked-label">{html.escape(label)}</div><div class="linked-value">{html.escape(str(content))} <span class="linked-icons" aria-hidden="true">{html.escape(icons)}</span></div><p>{html.escape(note)}</p></div>'
     def equipment(label, quantity_field, icon, presence_field=None):
         quantity = pd.to_numeric(row.get(quantity_field),errors="coerce")
         presence = yes_no(row.get(presence_field)) if presence_field else None
@@ -118,19 +118,18 @@ def linked_household_html(row):
 
 def render_linked_household(row):
     st.markdown('''<style>
-    .linked-household{margin:12px 0 24px;color:#234B7B}
-    .linked-household h4{margin:25px 0 12px;font-size:1.05rem}
-    .linked-heading{border-left:4px solid #FFC600;background:#EAF0F8;padding:12px 16px;border-radius:0 8px 8px 0;font-weight:600}
-    .linked-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-    .linked-card{border:1px solid #DFE7F0;background:white;border-radius:12px;padding:16px;overflow-wrap:anywhere}
-    .linked-label{color:#64798B;font-size:.8rem;margin-bottom:7px}
-    .linked-value{font-weight:650;font-size:1.12rem;line-height:1.4}
-    .linked-card p{font-size:.76rem;color:#64798B;margin:6px 0 0;line-height:1.5}
-    .linked-icons{font-size:1.45rem;line-height:1.7;word-spacing:5px}
-    .linked-alert{background:#FFF0F0;border-color:#EDB4B8}.linked-alert .linked-value{color:#A62D35}
-    .linked-materials{grid-template-columns:repeat(4,minmax(0,1fr))}
-    @media(max-width:1100px){.linked-grid,.linked-materials{grid-template-columns:repeat(2,minmax(0,1fr))}}
-    @media(max-width:420px){.linked-grid,.linked-materials{grid-template-columns:1fr}}
+    .linked-household{margin:8px 0 18px;color:#234B7B}
+    .linked-household h4{margin:17px 0 7px;font-size:.95rem}
+    .linked-heading{border-left:4px solid #FFC600;background:#EAF0F8;padding:8px 12px;border-radius:0 6px 6px 0;font-size:.85rem;font-weight:600}
+    .linked-grid{border:1px solid #DFE7F0;border-radius:8px;overflow:hidden}
+    .linked-card{display:grid;grid-template-columns:minmax(135px,.95fr) minmax(90px,.9fr) minmax(100px,1.5fr);align-items:center;gap:8px;border-bottom:1px solid #E9EEF4;background:white;padding:8px 12px;overflow-wrap:anywhere}
+    .linked-card:last-child{border-bottom:0}
+    .linked-label{color:#526C84;font-size:.8rem}
+    .linked-value{font-weight:600;font-size:.88rem;line-height:1.4}
+    .linked-card p{font-size:.72rem;color:#64798B;margin:0;line-height:1.4}
+    .linked-icons{font-size:1.05rem;word-spacing:2px;white-space:normal}
+    .linked-alert{background:#FFF0F0}.linked-alert .linked-value{color:#A62D35}
+    @media(max-width:520px){.linked-card{grid-template-columns:1fr 1fr;gap:3px 8px}.linked-card p{grid-column:2}.linked-card p:empty{display:none}}
     </style>''',unsafe_allow_html=True)
     st.markdown(linked_household_html(row),unsafe_allow_html=True)
 

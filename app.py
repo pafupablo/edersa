@@ -9,7 +9,7 @@ import streamlit as st
 
 from data_access import ROOT, SOURCES, load_local, load_sheets, local_available
 from model import DataError, UNKNOWN, build_dataset, evolution_statistics, group_statistics, label_period, general_consumption_trend, critical_consumption
-from charts import evolution_chart, individual_history_chart
+from charts import evolution_chart, individual_history_chart, trend_sparkline_svg
 from characterization import render_characterization, render_linked_household
 from neighborhoods import render_neighborhoods
 
@@ -332,7 +332,8 @@ elif section == "Usuarios y fichas":
     critical = row.consumo_critico != "—"
     with median_card:
         with st.container(key="individual_median_kpi"):
-            st.metric("Consumo mediano",fmt(row.mediana_usuario,1),chart_data=trend_values or None,chart_type="line",help="Mediana de consumos ≥100 en la ventana seleccionada. La mini línea muestra la tendencia general de todo el historial apto, igual que la línea punteada del gráfico.")
+            sparkline = trend_sparkline_svg(trend_values)
+            st.markdown('<div style="background:white;border:1px solid #E1E8EF;padding:18px;border-radius:12px;min-height:108px;box-sizing:border-box" title="Mediana de consumos ≥100 en la ventana seleccionada. Tendencia de todo el historial: verde si sube, roja si baja; más intensa según la variación."><div style="color:#5B6E80;font-size:.82rem;margin-bottom:4px">Consumo mediano</div><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:1.9rem;font-weight:600;white-space:nowrap">'+fmt(row.mediana_usuario,1)+'</span><div style="flex:0 0 38%;max-width:110px;height:44px">'+sparkline+'</div></div></div>',unsafe_allow_html=True)
             if critical:
                 reasons = []
                 if pd.notna(row.mediana_usuario) and row.mediana_usuario > 1000:
@@ -340,8 +341,6 @@ elif section == "Usuarios y fichas":
                 if pd.notna(row.consumo_ultimo) and row.consumo_ultimo > 1000:
                     reasons.append(f"último {fmt(row.consumo_ultimo,1)} ({label_period(latest)})")
                 st.markdown('<div style="background:#FDE2E2;color:#9F1239;border-radius:8px;padding:7px 10px;font-size:.8rem"><b>Consumo crítico</b> · '+html.escape(" · ".join(reasons))+'</div>',unsafe_allow_html=True)
-            if len(trend_values)<2:
-                st.caption("Sin suficientes mediciones ≥100 para calcular tendencia.")
     e.metric("Mediciones de consumo", fmt(raw_selected_c.usuario_id.eq(selected_id).sum()))
 
     left, right = st.columns([1, 1.5])

@@ -4,6 +4,21 @@ from plotly.subplots import make_subplots
 from model import label_period, general_consumption_trend
 
 
+def trend_sparkline_svg(values):
+    data = pd.to_numeric(pd.Series(values,dtype="float64"),errors="coerce").dropna().tolist()
+    if len(data)<2:
+        return '<span style="color:#8A98A7;font-size:.7rem">Sin tendencia</span>'
+    change = (data[-1]-data[0])/max(abs(data[0]),100)*100
+    direction = "up" if change>1 else "down" if change< -1 else "flat"
+    low,high = min(data),max(data)
+    strength = min(abs(change)/100,1)
+    light,dark = ((159,206,179),(22,131,74)) if direction=="up" else ((233,172,177),(180,35,50))
+    color = "#8A98A7" if direction=="flat" else '#'+''.join(f'{round(a+(b-a)*strength):02x}' for a,b in zip(light,dark))
+    points = ' '.join(f'{4+i*100/(len(data)-1):.2f},{22 if high==low else 40-(value-low)/(high-low)*36:.2f}' for i,value in enumerate(data))
+    label = "creciente" if direction=="up" else "decreciente" if direction=="down" else "estable"
+    return f'<svg data-direction="{direction}" role="img" aria-label="Tendencia {label}" viewBox="0 0 108 44" style="width:100%;height:44px"><title>Tendencia general {label}</title><polyline points="{points}" fill="none" stroke="{color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+
+
 def individual_history_chart(complete,history=None):
     labels = complete.periodo.map(label_period)
     values = complete.consumo.map(lambda value: "" if pd.isna(value) else f"{value:,.0f}".replace(",","."))
