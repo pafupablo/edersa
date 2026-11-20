@@ -263,6 +263,7 @@ def group_statistics(consumption, users, group, periods):
     index = pd.MultiIndex.from_product([groups.index, periods], names=["grupo", "periodo"])
     stats = observations.groupby(["grupo", "periodo"]).agg(mediana=("consumo", "median"), media=("consumo", "mean"), p25=("consumo", lambda s: s.quantile(.25)), p75=("consumo", lambda s: s.quantile(.75)), desvio=("consumo", "std"), con_dato=("usuario_id", "nunique")).reindex(index).reset_index()
     stats["con_dato"] = stats.con_dato.fillna(0).astype(int)
-    stats["usuarios"] = stats.grupo.map(groups)
-    stats["cobertura"] = stats.con_dato / stats.usuarios * 100
+    # Un mapeo vacío de StringDtype puede conservar el tipo texto en Arrow.
+    stats["usuarios"] = pd.to_numeric(stats.grupo.map(groups),errors="coerce").fillna(0).astype("int64")
+    stats["cobertura"] = stats.con_dato / stats.usuarios.where(stats.usuarios.gt(0)) * 100
     return observations, stats

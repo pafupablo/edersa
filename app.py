@@ -393,10 +393,10 @@ elif section == "Comparar grupos":
     selected_groups = st.multiselect("Grupos a contrastar", available_groups, default=available_groups[:6], max_selections=12, key=selection_key)
     st.caption("Podés contrastar hasta 12 grupos. Si hay muchos, se proponen inicialmente los seis con más usuarios.")
     compare_users = filtered.loc[filtered[group].isin(selected_groups)]
-    observations, stats = group_statistics(c, compare_users, group, periods)
     if not selected_groups or not periods:
         st.info("Seleccioná al menos un grupo y un período para comparar sus consumos.")
     else:
+        observations, stats = group_statistics(c, compare_users, group, periods)
         color_map = {name: COLORS[i] for i, name in enumerate(selected_groups)}
         st.markdown("#### Evolución del consumo de cada grupo")
         metric = st.radio("Estadístico de la evolución", ["Mediana", "Media"], horizontal=True, key="compare_metric")
