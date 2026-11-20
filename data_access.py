@@ -1,6 +1,7 @@
 """Lectura local para revisión y Google Sheets para la aplicación online."""
 from datetime import datetime, timezone
 import json
+from zipfile import ZipFile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -8,10 +9,16 @@ SOURCES = json.loads((ROOT / "sources.json").read_text(encoding="utf-8"))
 
 
 def local_available():
-    return all((ROOT / "data" / f"{key}.json").exists() for key in SOURCES)
+    return (ROOT / "trial_snapshot.zip").exists() or all((ROOT / "data" / f"{key}.json").exists() for key in SOURCES)
 
 
 def load_local():
+    snapshot_zip = ROOT / "trial_snapshot.zip"
+    if snapshot_zip.exists():
+        with ZipFile(snapshot_zip) as archive:
+            raw = {key: json.loads(archive.read(f"{key}.json")) for key in SOURCES}
+            metadata = json.loads(archive.read("snapshot.json"))
+        return raw, metadata.get("fetched_at", "Copia de prueba sin fecha")
     raw = {key: json.loads((ROOT / "data" / f"{key}.json").read_text(encoding="utf-8")) for key in SOURCES}
     metadata_path = ROOT / "data" / "snapshot.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
