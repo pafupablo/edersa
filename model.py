@@ -13,6 +13,15 @@ NO_BARRIO = "Sin barrio vinculado"
 MIN_CONSUMPTION = 100
 
 
+def critical_consumption(median, latest):
+    reasons = []
+    if pd.notna(median) and median > 1000:
+        reasons.append("Mediana")
+    if pd.notna(latest) and latest > 1000:
+        reasons.append("Último")
+    return " y ".join(reasons) if reasons else "—"
+
+
 def general_consumption_trend(history, periods):
     """Linear fit to all eligible user history, without extrapolation."""
     eligible = history.loc[history.consumo.ge(MIN_CONSUMPTION)].dropna(subset=["periodo","consumo"]).sort_values("periodo")

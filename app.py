@@ -8,7 +8,7 @@ import plotly.express as px
 import streamlit as st
 
 from data_access import ROOT, SOURCES, load_local, load_sheets, local_available
-from model import DataError, UNKNOWN, build_dataset, evolution_statistics, group_statistics, label_period
+from model import DataError, UNKNOWN, build_dataset, evolution_statistics, group_statistics, label_period, general_consumption_trend, critical_consumption
 from charts import evolution_chart, individual_history_chart
 from characterization import render_characterization
 from neighborhoods import render_neighborhoods
@@ -302,19 +302,20 @@ elif section == "Usuarios y fichas":
     executed_events = interventions.loc[interventions.vinculo.eq("Confirmado") & ~interventions.duplicado_exacto & interventions.estado.eq("Ejecutada")]
     executed_labels = executed_events.groupby("usuario_id").solucion.agg(lambda values: "; ".join(sorted(set(values))))
     view["ejecuciones_etiquetas"] = view.usuario_id.map(executed_labels).fillna("Sin ejecución registrada")
-    columns = {"usuario_id": "Usua_ID", "nis": "NIS", "mediana_usuario": "Mediana", "cantidad_consumos": "Mediciones de consumo", "consumo_ultimo": "Último consumo", "barrio": "Barrio", "localidad": "Localidad", "tipo_pase": "Tipo PASE", "programa_grupo": "Programa", "intervencion_tipos": "Soluciones registradas", "ejecuciones_etiquetas": "Intervenciones ejecutadas"}
+    view["consumo_critico"] = view.apply(lambda item:critical_consumption(item.mediana_usuario,item.consumo_ultimo),axis=1)
+    columns = {"usuario_id": "Usua_ID", "nis": "NIS", "mediana_usuario": "Mediana", "cantidad_consumos": "Mediciones de consumo", "consumo_critico": "Consumo crítico", "barrio": "Barrio", "localidad": "Localidad", "tipo_pase": "Tipo PASE", "programa_grupo": "Programa", "intervencion_tipos": "Soluciones registradas", "ejecuciones_etiquetas": "Intervenciones ejecutadas"}
     listing = view[list(columns)].rename(columns=columns).reset_index(drop=True)
     st.markdown("#### Usuarios de la selección")
     st.caption("Seleccioná una fila para abrir su ficha. También podés buscar por identificador con los filtros.")
-    st.caption("Mediana: consumos ≥100 en la ventana seleccionada. Rojo: >1000; amarillo: 800–1000. Cantidad: todos los registros de consumo de esa ventana, incluidos los menores a 100. Las soluciones y ejecuciones muestran sus etiquetas; pasá el cursor sobre una celda para leer el texto completo.")
+    st.caption("Mediana: consumos ≥100 en la ventana seleccionada. Rojo: >1000; amarillo: 800–1000. Cantidad: todos los registros de consumo de esa ventana, incluidos los menores a 100. Consumo crítico: mediana o último valor >1000. Las soluciones y ejecuciones muestran sus etiquetas; pasá el cursor sobre una celda para leer el texto completo.")
     compact_listing = listing.copy()
-    compact_listing.columns = pd.MultiIndex.from_tuples([("Usuario","ID"),("Usuario","NIS"),("Mediana","consumo"),("Mediciones","de consumo"),("Último","consumo"),("Ubicación","Barrio"),("Ubicación","Localidad"),("Tipo","PASE"),("Programa","300 / No 300"),("Soluciones","registradas"),("Intervenciones","ejecutadas")])
-    styled_listing = compact_listing.style.map(median_style, subset=[("Mediana","consumo")]).format({("Mediana","consumo"): "{:.1f}",("Mediciones","de consumo"):"{:d}",("Último","consumo"):"{:.1f}"}, na_rep="—")
+    compact_listing.columns = pd.MultiIndex.from_tuples([("Usuario","ID"),("Usuario","NIS"),("Mediana","consumo"),("Mediciones","de consumo"),("Consumo","crítico"),("Ubicación","Barrio"),("Ubicación","Localidad"),("Tipo","PASE"),("Programa","300 / No 300"),("Soluciones","registradas"),("Intervenciones","ejecutadas")])
+    styled_listing = compact_listing.style.map(median_style, subset=[("Mediana","consumo")]).map(lambda value:"background-color:#FDE2E2;color:#9F1239;font-weight:bold" if value != "—" else "",subset=[("Consumo","crítico")]).format({("Mediana","consumo"): "{:.1f}",("Mediciones","de consumo"):"{:d}"}, na_rep="—")
     # Posiciones Arrow: el índice oculto ocupa la posición cero.
     configs = {i:st.column_config.Column(width=width) for i,width in enumerate([125,90,75,75,80,140,115,75,85,155,155],start=1)}
     configs[3] = st.column_config.NumberColumn(width=75,help="Mediana de los consumos ≥100 del usuario dentro de la ventana seleccionada.",format="%.1f")
     configs[4] = st.column_config.NumberColumn(width=75,help="Cantidad de registros de consumo en la ventana seleccionada, incluidos los menores a 100.",format="%d")
-    configs[5] = st.column_config.NumberColumn(width=80,help=f"Consumo registrado en {label_period(latest)}.",format="%.1f")
+    configs[5] = st.column_config.TextColumn(width=100,help="Indica si la mediana, el último consumo o ambos superan 1000. Exactamente 1000 no se considera crítico.")
     event = st.dataframe(styled_listing, hide_index=True, width="stretch", height=350, row_height=30, on_select="rerun", selection_mode="single-row", column_config=configs, key="user_table_" + str(pd.util.hash_pandas_object(listing[["Usua_ID"]]).sum()))
     st.download_button("Descargar selección · CSV", csv_bytes(listing), "edersa_usuarios.csv", "text/csv", key="download_users")
     selected_rows = event.selection.rows
@@ -324,11 +325,23 @@ elif section == "Usuarios y fichas":
     row = view.loc[view.usuario_id.eq(selected_id)].iloc[0]
     st.divider()
     st.markdown(f"### {selected_id}")
-    a, d, median_card, e = st.columns(4)
+    a, median_card, e = st.columns([1,1.4,1])
     a.metric("Barrio", row.barrio)
     full_history = c.loc[c.usuario_id.eq(selected_id)].sort_values("periodo")
-    d.metric(f"Consumo · {label_period(latest)}", fmt(row.consumo_ultimo))
-    median_card.metric("Consumo mediano",fmt(row.mediana_usuario,1),help="Mediana de los consumos ≥100 en la ventana seleccionada.")
+    trend_values = general_consumption_trend(full_history,full_history.periodo).dropna().tolist()
+    critical = row.consumo_critico != "—"
+    with median_card:
+        with st.container(key="individual_median_kpi"):
+            st.metric("Consumo mediano",fmt(row.mediana_usuario,1),chart_data=trend_values or None,chart_type="line",help="Mediana de consumos ≥100 en la ventana seleccionada. La mini línea muestra la tendencia general de todo el historial apto, igual que la línea punteada del gráfico.")
+            if critical:
+                reasons = []
+                if pd.notna(row.mediana_usuario) and row.mediana_usuario > 1000:
+                    reasons.append(f"mediana {fmt(row.mediana_usuario,1)}")
+                if pd.notna(row.consumo_ultimo) and row.consumo_ultimo > 1000:
+                    reasons.append(f"último {fmt(row.consumo_ultimo,1)} ({label_period(latest)})")
+                st.markdown('<div style="background:#FDE2E2;color:#9F1239;border-radius:8px;padding:7px 10px;font-size:.8rem"><b>Consumo crítico</b> · '+html.escape(" · ".join(reasons))+'</div>',unsafe_allow_html=True)
+            if len(trend_values)<2:
+                st.caption("Sin suficientes mediciones ≥100 para calcular tendencia.")
     e.metric("Mediciones de consumo", fmt(raw_selected_c.usuario_id.eq(selected_id).sum()))
 
     left, right = st.columns([1, 1.5])

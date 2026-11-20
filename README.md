@@ -131,3 +131,5 @@ Las pruebas del modelo usan casos con NIS compartido, consumos duplicados, ceros
 ### Ficha individual: tendencia y estaciones
 
 Gas figura en Caracterización disponible. La ficha conserva consumo actual, mediana y cantidad de registros. El historial incluye una tendencia lineal general por mínimos cuadrados, calculada con todos los consumos ≥100 del usuario, aunque estén fuera de la ventana visible. Requiere al menos dos períodos válidos y no extrapola más allá del historial apto. Es descriptiva y no ajusta por estacionalidad. Los puntos muestran los valores registrados. Invierno (junio–agosto) usa banda blanca y copo discreto; verano (diciembre–febrero), banda amarilla y sol discreto.
+
+La mediana de la ficha incorpora una mini línea con la tendencia general del historial apto (≥100). Se elimina el KPI y la columna de último consumo; el último valor sigue participando del aviso de consumo crítico cuando supera 1000, igual que la mediana. La tabla indica cuál de los dos activa el aviso. En el historial, una línea en 100 aparece si hay mediciones inferiores y otra en 1000 si hay mediciones críticas; los puntos se distinguen por color.

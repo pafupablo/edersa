@@ -11,6 +11,12 @@ def individual_history_chart(complete,history=None):
     trend = general_consumption_trend(complete if history is None else history,complete.periodo)
     if trend.notna().any():
         fig.add_trace(go.Scatter(x=complete.periodo,y=trend,name="Tendencia general",mode="lines",line=dict(color="#6C7D91",width=2,dash="dash"),connectgaps=False,customdata=labels,hovertemplate="%{customdata}<br>Tendencia general: %{y:.1f}<extra></extra>"))
+    if complete.consumo.lt(100).any():
+        fig.add_hline(y=100,line_dash="dot",line_color="#C27B13",line_width=1.5,annotation_text="Umbral: 100 · mediciones inferiores excluidas",annotation_position="bottom left",annotation_font=dict(size=10,color="#94600C"))
+        fig.data[0].marker.color = ["#C27B13" if pd.notna(value) and value < 100 else "#30598F" for value in complete.consumo]
+    if complete.consumo.gt(1000).any():
+        fig.add_hline(y=1000,line_dash="dot",line_color="#C34248",line_width=1.5,annotation_text="Consumo crítico: >1000",annotation_position="top left",annotation_font=dict(size=10,color="#A62D35"))
+        fig.data[0].marker.color = ["#C34248" if pd.notna(value) and value > 1000 else "#C27B13" if pd.notna(value) and value < 100 else "#30598F" for value in complete.consumo]
     if not complete.empty:
         start = complete.periodo.min()
         end = complete.periodo.max() + pd.DateOffset(months=2)
