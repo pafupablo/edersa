@@ -192,7 +192,7 @@ def build_dataset(raw):
     }
     quality = pd.DataFrame([
         {"Control": "Usuarios sin consumo válido", "Cantidad": int((~u.tiene_consumo).sum()), "Criterio": "No se imputa consumo cero."},
-        {"Control": "Observaciones de consumo menores a 100", "Cantidad": int(c.consumo.lt(MIN_CONSUMPTION).sum()), "Criterio": "Se conservan en las fichas; no entran en estadísticas ni en su cantidad de observaciones."},
+        {"Control": "Mediciones de consumo menores a 100", "Cantidad": int(c.consumo.lt(MIN_CONSUMPTION).sum()), "Criterio": "Se conservan en las fichas; no entran en estadísticas ni en su cantidad de mediciones de consumo."},
         {"Control": "Usuarios sin GPS válido", "Cantidad": int((~u.tiene_gps).sum()), "Criterio": "La ficha sigue disponible."},
         {"Control": "Usuarios sin RENABAP", "Cantidad": int(u.renabap.eq("").sum()), "Criterio": "Sin asignación de barrio."},
         {"Control": "RENABAP sin correspondencia", "Cantidad": len(unknown_b), "Criterio": "El código no existe en Barrios."},

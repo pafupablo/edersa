@@ -89,9 +89,9 @@ El grupo ‘Con ejecución registrada’ considera cualquier fecha; no implica q
 
 ## Integridad y faltantes
 
-Claves maestras vacías o repetidas detienen la consulta. Observaciones con consumo negativo/no numérico, período no interpretable o clave usuario-período repetida quedan excluidas y visibles en calidad. No se suman duplicados. Los consumos sin usuario también quedan fuera del universo. Un consumo cero válido se conserva; un dato faltante nunca se imputa como cero.
+Claves maestras vacías o repetidas detienen la consulta. Mediciones de consumo con valor negativo/no numérico, período no interpretable o clave usuario-período repetida quedan excluidas y visibles en calidad. No se suman duplicados. Los consumos sin usuario también quedan fuera del universo. Un consumo cero válido se conserva; un dato faltante nunca se imputa como cero.
 
-Todas las estadísticas de consumo usan únicamente observaciones **mayores o iguales a 100**, incluidos medias, medianas, percentiles, desvíos, totales y cantidad de usuarios con observación estadística. El corte es por observación: un usuario puede participar en un período y quedar excluido en otro. Los usuarios siguen en el padrón y los valores menores a 100 se conservan en la ficha, identificados como excluidos de estadísticas.
+Todas las estadísticas de consumo usan únicamente mediciones de consumo **mayores o iguales a 100**, incluidos medias, medianas, percentiles, desvíos, totales y cantidad de usuarios con medición de consumo apta para estadísticas. El corte es por medición de consumo: un usuario puede participar en un período y quedar excluido en otro. Los usuarios siguen en el padrón y los valores menores a 100 se conservan en la ficha, identificados como excluidos de estadísticas.
 
 La mediana es la medida principal. La evolución separa **consumo** (mediana azul, media amarilla y banda P25–P75) de **cantidad de usuarios** (barras en un panel inferior con su propio eje). El cursor informa variación porcentual de la mediana y cobertura de usuarios; ya no incluye desvío estándar. La descarga CSV distingue explícitamente columnas de consumo y de usuarios e incluye los faltantes y valores menores a 100 excluidos. La composición observada puede cambiar entre períodos. Un período sin dato aparece como un hueco.
 
@@ -102,12 +102,12 @@ El gráfico compara los mismos barrios en filas compartidas: a la izquierda, los
 La sección incluye todos los barrios filtrados territorialmente, también los que no tienen usuarios registrados. Caracterización de hogares se encuentra inmediatamente antes de Fuentes y calidad en la navegación. El Tipo PASE vacío se muestra como **No es PASE**, por convención solicitada; se conserva tipo_pase_original y el campo PASE original.
 
 - **Usuarios registrados:** Usua_ID distintos del padrón con RENABAP vinculado.
-- **Consumidores con registro:** usuarios con una observación válida en el último bimestre disponible, incluidos los valores menores a 100.
+- **Consumidores con registro:** usuarios con una medición de consumo válida en el último bimestre disponible, incluidos los valores menores a 100.
 - **Consumo bajo persistente:** menos de 100 durante al menos dos bimestres consecutivos (cuatro meses) que terminan en el último período disponible. Un período ausente o un valor de 100 o más corta la secuencia.
 - **Sin consumo:** sin registros válidos en todo el historial disponible, según lo definido por el usuario. La falta de dato solo en el último bimestre se informa aparte y no alcanza este criterio.
 - **Posibles colgados / casos a revisar:** unión sin duplicados de persistencia baja y ausencia de historial. Es una señal de los datos, no una constatación de conexión irregular.
 - **Sin medidor estimado:** máximo(Viviendas Estimadas − usuarios registrados, 0) para cada barrio. La fuente contiene viviendas estimadas, no familias ni medidores observados. Se supone un usuario por vivienda. La brecha no se calcula restando solo los consumidores con lectura.
-- **Mediana barrial:** último bimestre entre observaciones mayores o iguales a 100. La mediana conjunta se calcula sobre todos los usuarios elegibles seleccionados, no promediando medianas de barrios.
+- **Mediana barrial:** último bimestre entre mediciones de consumo mayores o iguales a 100. La mediana conjunta se calcula sobre todos los usuarios elegibles seleccionados, no promediando medianas de barrios.
 
 Las incidencias de posibles colgados usan usuarios registrados como denominador; las brechas de medición usan viviendas estimadas. Los barrios con cero usuarios no tienen una incidencia de usuarios calculable, pero sí pueden tener brecha estimada. Los usuarios sin barrio no se asignan por suposición. Se conservan los casos donde el padrón excede las viviendas estimadas para revisión. Se exportan indicadores barriales y los usuarios que cumplen el criterio.
 

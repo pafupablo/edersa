@@ -272,7 +272,7 @@ if section == "Panorama":
     b.metric("Barrios vinculados", fmt(filtered.loc[filtered.barrio_vinculado, "renabap"].nunique()))
     d.metric("Usuarios con consumo ≥100", fmt(latest_c.usuario_id.nunique()), help=f"Período consumido: {label_period(latest)}.")
     e.metric("Consumo mediano · último período", fmt(latest_c.consumo.median(), 1), help="Mediana entre usuarios con consumo ≥100; se excluyen faltantes y valores menores a 100.")
-    st.caption(f"Período consumido: {label_period(latest)} · Cobertura estadística: {fmt(100 * latest_c.usuario_id.nunique() / len(filtered), 1)}% · Observaciones menores a 100 excluidas: {fmt(latest_raw.consumo.lt(100).sum())}.")
+    st.caption(f"Período consumido: {label_period(latest)} · Cobertura estadística: {fmt(100 * latest_c.usuario_id.nunique() / len(filtered), 1)}% · Mediciones de consumo menores a 100 excluidas: {fmt(latest_raw.consumo.lt(100).sum())}.")
     st.caption(f"En la selección: {fmt(filtered.intervenciones_registros.gt(0).sum())} usuarios con registros de soluciones vinculados y {fmt(filtered.intervenciones_ejecutadas.gt(0).sum())} con ejecución marcada ‘sí’ en alguna fecha. Sin registro no equivale a ausencia de intervención.")
     st.markdown("#### Evolución del consumo · mediana y media")
     if selected_c.empty:
@@ -302,14 +302,14 @@ elif section == "Usuarios y fichas":
     executed_events = interventions.loc[interventions.vinculo.eq("Confirmado") & ~interventions.duplicado_exacto & interventions.estado.eq("Ejecutada")]
     executed_labels = executed_events.groupby("usuario_id").solucion.agg(lambda values: "; ".join(sorted(set(values))))
     view["ejecuciones_etiquetas"] = view.usuario_id.map(executed_labels).fillna("Sin ejecución registrada")
-    columns = {"usuario_id": "Usua_ID", "nis": "NIS", "mediana_usuario": "Mediana", "cantidad_consumos": "Cantidad de consumos", "consumo_ultimo": "Último consumo", "barrio": "Barrio", "localidad": "Localidad", "tipo_pase": "Tipo PASE", "programa_grupo": "Programa", "intervencion_tipos": "Soluciones registradas", "ejecuciones_etiquetas": "Intervenciones ejecutadas"}
+    columns = {"usuario_id": "Usua_ID", "nis": "NIS", "mediana_usuario": "Mediana", "cantidad_consumos": "Mediciones de consumo", "consumo_ultimo": "Último consumo", "barrio": "Barrio", "localidad": "Localidad", "tipo_pase": "Tipo PASE", "programa_grupo": "Programa", "intervencion_tipos": "Soluciones registradas", "ejecuciones_etiquetas": "Intervenciones ejecutadas"}
     listing = view[list(columns)].rename(columns=columns).reset_index(drop=True)
     st.markdown("#### Usuarios de la selección")
     st.caption("Seleccioná una fila para abrir su ficha. También podés buscar por identificador con los filtros.")
     st.caption("Mediana: consumos ≥100 en la ventana seleccionada. Rojo: >1000; amarillo: 800–1000. Cantidad: todos los registros de consumo de esa ventana, incluidos los menores a 100. Las soluciones y ejecuciones muestran sus etiquetas; pasá el cursor sobre una celda para leer el texto completo.")
     compact_listing = listing.copy()
-    compact_listing.columns = pd.MultiIndex.from_tuples([("Usuario","ID"),("Usuario","NIS"),("Mediana","consumo"),("Consumos","registrados"),("Último","consumo"),("Ubicación","Barrio"),("Ubicación","Localidad"),("Tipo","PASE"),("Programa","300 / No 300"),("Soluciones","registradas"),("Intervenciones","ejecutadas")])
-    styled_listing = compact_listing.style.map(median_style, subset=[("Mediana","consumo")]).format({("Mediana","consumo"): "{:.1f}",("Consumos","registrados"):"{:d}",("Último","consumo"):"{:.1f}"}, na_rep="—")
+    compact_listing.columns = pd.MultiIndex.from_tuples([("Usuario","ID"),("Usuario","NIS"),("Mediana","consumo"),("Mediciones","de consumo"),("Último","consumo"),("Ubicación","Barrio"),("Ubicación","Localidad"),("Tipo","PASE"),("Programa","300 / No 300"),("Soluciones","registradas"),("Intervenciones","ejecutadas")])
+    styled_listing = compact_listing.style.map(median_style, subset=[("Mediana","consumo")]).format({("Mediana","consumo"): "{:.1f}",("Mediciones","de consumo"):"{:d}",("Último","consumo"):"{:.1f}"}, na_rep="—")
     # Posiciones Arrow: el índice oculto ocupa la posición cero.
     configs = {i:st.column_config.Column(width=width) for i,width in enumerate([125,90,75,75,80,140,115,75,85,155,155],start=1)}
     configs[3] = st.column_config.NumberColumn(width=75,help="Mediana de los consumos ≥100 del usuario dentro de la ventana seleccionada.",format="%.1f")
@@ -320,7 +320,7 @@ elif section == "Usuarios y fichas":
     selected_rows = event.selection.rows
     default_index = selected_rows[0] if selected_rows and selected_rows[0] < len(view) else 0
     options_ids = view.usuario_id.tolist()
-    selected_id = st.selectbox("Ficha de usuario", options_ids, index=default_index, key="selected_user_" + str(default_index), help="La ficha muestra las observaciones de consumo dentro de la ventana seleccionada.")
+    selected_id = st.selectbox("Ficha de usuario", options_ids, index=default_index, key="selected_user_" + str(default_index), help="La ficha muestra las mediciones de consumo dentro de la ventana seleccionada.")
     row = view.loc[view.usuario_id.eq(selected_id)].iloc[0]
     st.divider()
     st.markdown(f"### {selected_id}")
@@ -329,7 +329,7 @@ elif section == "Usuarios y fichas":
     full_history = c.loc[c.usuario_id.eq(selected_id)].sort_values("periodo")
     d.metric(f"Consumo · {label_period(latest)}", fmt(row.consumo_ultimo))
     median_card.metric("Consumo mediano",fmt(row.mediana_usuario,1),help="Mediana de los consumos ≥100 en la ventana seleccionada.")
-    e.metric("Observaciones en la ventana", fmt(raw_selected_c.usuario_id.eq(selected_id).sum()))
+    e.metric("Mediciones de consumo", fmt(raw_selected_c.usuario_id.eq(selected_id).sum()))
 
     left, right = st.columns([1, 1.5])
     with left:
@@ -344,7 +344,7 @@ elif section == "Usuarios y fichas":
         if history.empty:
             st.info("Sin consumo disponible en esta ventana.")
         else:
-            # Reindexar para que un período sin observación se vea como un hueco.
+            # Reindexar para que un período sin medición de consumo se vea como un hueco.
             complete = history.set_index("periodo")["consumo"].reindex(periods).rename_axis("periodo").reset_index()
             fig = individual_history_chart(complete,full_history)
             chart(fig, "individual_history",height=420,top_margin=75,plot_background="#EEF3F8")
@@ -479,9 +479,9 @@ else:
     - **Gas:** vacío significa sin información, no confirma acceso a gas.
     - **Programa:** se agrupa en 300 / No 300; un valor faltante permanece como sin información. Categoría conserva su código original.
     - **PASE:** clasificación del barrio; no prueba una intervención en cada suministro.
-    - **Cobertura:** cada período informa cuántos usuarios tienen observación. No se completan faltantes con ceros.
-    - **Umbral estadístico:** se excluye cada observación menor a 100 de medias, medianas, percentiles, desvíos, totales y recuentos estadísticos. Los usuarios siguen en el padrón y esos valores se conservan en sus fichas.
-    - **Dispersión:** P25–P75 contiene el 50% central; el desvío estándar es muestral y queda sin calcular cuando hay menos de dos observaciones.
+    - **Cobertura:** cada período informa cuántos usuarios tienen una medición de consumo. No se completan faltantes con ceros.
+    - **Umbral estadístico:** se excluye cada medición de consumo menor a 100 de medias, medianas, percentiles, desvíos, totales y recuentos estadísticos. Los usuarios siguen en el padrón y esos valores se conservan en sus fichas.
+    - **Dispersión:** P25–P75 contiene el 50% central; el desvío estándar es muestral y queda sin calcular cuando hay menos de dos mediciones de consumo.
     - **Intervenciones:** se lee únicamente A:L de CARGAR SOLUCIONES ACÁ del Excel de soluciones. Se conservan propuestas, ejecución, negativas y registros sin confirmar. Solo los vínculos confirmados se asignan al usuario.
     - **Cruces de soluciones:** NIS exacto, Persona/Cuenta y corroboración con barrio. Conflictos y vínculos probables quedan pendientes. Nunca se identifica a un hogar solo por barrio.
     - **Encuestas:** la caracterización incluye todas las encuestas residenciales completas seleccionadas, también las que no tienen vínculo confirmado con el padrón. Sus filtros territoriales son independientes de los filtros de usuarios.
