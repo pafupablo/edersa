@@ -8,7 +8,7 @@ import plotly.express as px
 import streamlit as st
 
 from data_access import ROOT, SOURCES, load_local, load_sheets, local_available
-from model import DataError, UNKNOWN, build_dataset, evolution_statistics, group_statistics, label_period, general_consumption_trend, critical_consumption
+from model import DataError, UNKNOWN, build_dataset, evolution_statistics, group_statistics, label_period, general_consumption_trend, critical_consumption, filter_household_survey_status, pase_filter_label
 from charts import evolution_chart, individual_history_chart, trend_sparkline_svg
 from characterization import render_characterization, render_linked_household
 from neighborhoods import render_neighborhoods
@@ -143,13 +143,13 @@ with st.sidebar:
 
     filtered = u.copy()
 
-    def multiselect_filter(label, column):
+    def multiselect_filter(label, column, format_func=str):
         global filtered
         values = sorted(filtered[column].dropna().astype(str).unique())
         key = f"filter_{column}"
         if key in st.session_state:
             st.session_state[key] = [v for v in st.session_state[key] if v in values]
-        selected = st.multiselect(label, values, key=key, placeholder="Todos")
+        selected = st.multiselect(label, values, key=key, placeholder="Todos", format_func=format_func)
         if selected:
             filtered = filtered.loc[filtered[column].isin(selected)]
 
@@ -197,13 +197,18 @@ with st.sidebar:
         multiselect_filter("Departamento", "departamento")
         multiselect_filter("Localidad", "localidad")
         multiselect_filter("Barrio · localidad · RENABAP", "barrio_etiqueta")
-        multiselect_filter("PASE del barrio", "pase_barrio")
-        multiselect_filter("Tipo PASE del barrio", "tipo_pase")
+        multiselect_filter("PASE", "tipo_pase", format_func=pase_filter_label)
+        survey_status = st.selectbox(
+            "Encuesta de hogar vinculada",
+            ["Todos", "Sí", "No"],
+            key="filter_household_survey",
+            help="Sí indica que el usuario tiene al menos una encuesta residencial vinculada de forma confirmada.",
+        )
+        filtered = filter_household_survey_status(filtered, survey_status)
         multiselect_filter("Programa", "programa_grupo")
         multiselect_filter("Ejecución registrada · cualquier fecha", "intervencion_grupo")
         with st.expander("Más filtros"):
             multiselect_filter("Registro de gas", "gas")
-            multiselect_filter("Categoría · código", "categoria")
             for label, col in [("Con consumo ≥100 en algún período", "tiene_consumo_estadistico")]:
                 choice = st.selectbox(label, ["Todos", "Sí", "No"], key=f"filter_{col}")
                 if choice != "Todos":

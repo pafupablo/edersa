@@ -11,6 +11,26 @@ from surveys import SurveyDataset, build_surveys
 UNKNOWN = "Sin información"
 NO_BARRIO = "Sin barrio vinculado"
 MIN_CONSUMPTION = 100
+PASE_FILTER_LABELS = {
+    "BLANDO": "PASE blando",
+    "DURO": "PASE duro",
+    "No es PASE": "No es PASE",
+}
+
+
+def pase_filter_label(value):
+    return PASE_FILTER_LABELS.get(value, value)
+
+
+def filter_household_survey_status(users, choice):
+    """Filtra usuarios según tengan al menos una encuesta residencial vinculada."""
+    if choice == "Todos":
+        return users
+    expected = {"Sí": True, "No": False}
+    if choice not in expected:
+        raise ValueError(f"Estado de encuesta desconocido: {choice}")
+    linked = pd.to_numeric(users["encuestas_vinculadas"], errors="coerce").fillna(0).gt(0)
+    return users.loc[linked.eq(expected[choice])]
 
 
 def critical_consumption(median, latest):
