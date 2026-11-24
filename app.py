@@ -8,7 +8,8 @@ import plotly.express as px
 import streamlit as st
 
 from data_access import ROOT, SOURCES, load_local, load_sheets, local_available
-from model import DataError, UNKNOWN, build_dataset, evolution_statistics, group_statistics, label_period, general_consumption_trend, critical_consumption, filter_household_survey_status, pase_filter_label
+from model import DataError, UNKNOWN, build_dataset, evolution_statistics, group_statistics, label_period, general_consumption_trend, critical_consumption
+from sidebar_filters import filter_household_survey_status, pase_filter_label
 from charts import evolution_chart, individual_history_chart, trend_sparkline_svg
 from characterization import render_characterization, render_linked_household
 from neighborhoods import render_neighborhoods

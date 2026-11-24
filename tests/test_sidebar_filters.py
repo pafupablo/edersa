@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from model import filter_household_survey_status, pase_filter_label
+from sidebar_filters import filter_household_survey_status, pase_filter_label
 
 
 class HouseholdSurveyFilterTests(unittest.TestCase):
