@@ -6,6 +6,8 @@ from plotly.subplots import make_subplots
 import streamlit as st
 from model import MIN_CONSUMPTION, label_period
 
+CRITICAL_MEDIAN = 1000
+
 
 def neighborhood_indicators(users, consumption, neighborhoods):
     reference = consumption.periodo.max() if len(consumption) else pd.NaT
@@ -21,14 +23,22 @@ def neighborhood_indicators(users, consumption, neighborhoods):
             current -= pd.DateOffset(months=2)
         no_history = not readings
         persistent = consecutive * 2 > 3
+        eligible_readings = [value for value in readings.values() if pd.notna(value) and value >= MIN_CONSUMPTION]
+        user_median = pd.Series(eligible_readings, dtype="float64").median() if eligible_readings else float("nan")
+        critical = pd.notna(user_median) and user_median > CRITICAL_MEDIAN
+        latest_eligible = pd.notna(latest) and latest >= MIN_CONSUMPTION
+        chart_latest_eligible = not critical and latest_eligible
+        chart_persistent = not critical and persistent
+        chart_no_history = not critical and no_history
+        chart_other = not (critical or chart_latest_eligible or chart_persistent or chart_no_history)
         status = "Sin consumo en todo el historial" if no_history else "Consumo bajo persistente" if persistent else "Consumo ≥100 en el último período" if pd.notna(latest) and latest >= MIN_CONSUMPTION else "Otros usuarios registrados"
-        records.append({"usuario_id": user.usuario_id, "nis": user.nis, "renabap": user.renabap, "barrio": user.barrio, "localidad": user.localidad, "consumo_ultimo": latest, "meses_bajos_consecutivos": consecutive * 2, "sin_historial": no_history, "bajo_persistente": persistent, "posible_irregularidad": no_history or persistent, "estado": status})
-    detail = pd.DataFrame(records, columns=["usuario_id","nis","renabap","barrio","localidad","consumo_ultimo","meses_bajos_consecutivos","sin_historial","bajo_persistente","posible_irregularidad","estado"])
+        records.append({"usuario_id": user.usuario_id, "nis": user.nis, "renabap": user.renabap, "barrio": user.barrio, "localidad": user.localidad, "consumo_ultimo": latest, "mediana_consumo_usuario": user_median, "usuario_critico": critical, "meses_bajos_consecutivos": consecutive * 2, "sin_historial": no_history, "bajo_persistente": persistent, "posible_irregularidad": no_history or persistent, "grafico_consumo_valido": chart_latest_eligible, "grafico_bajo_persistente": chart_persistent, "grafico_sin_historial": chart_no_history, "grafico_otros": chart_other, "estado": status})
+    detail = pd.DataFrame(records, columns=["usuario_id","nis","renabap","barrio","localidad","consumo_ultimo","mediana_consumo_usuario","usuario_critico","meses_bajos_consecutivos","sin_historial","bajo_persistente","posible_irregularidad","grafico_consumo_valido","grafico_bajo_persistente","grafico_sin_historial","grafico_otros","estado"])
     table = neighborhoods.copy()
     table["etiqueta"] = table.barrio + " · " + table.localidad + " · " + table.renabap
-    aggregation = detail.groupby("renabap").agg(usuarios_registrados=("usuario_id","nunique"), sin_historial=("sin_historial","sum"), bajo_persistente=("bajo_persistente","sum"), posibles_irregulares=("posible_irregularidad","sum"))
+    aggregation = detail.groupby("renabap").agg(usuarios_registrados=("usuario_id","nunique"), sin_historial=("sin_historial","sum"), bajo_persistente=("bajo_persistente","sum"), posibles_irregulares=("posible_irregularidad","sum"), usuarios_criticos=("usuario_critico","sum"), usuarios_estadistica_grafico=("grafico_consumo_valido","sum"), bajo_persistente_grafico=("grafico_bajo_persistente","sum"), sin_historial_grafico=("grafico_sin_historial","sum"), otros_registrados_grafico=("grafico_otros","sum"))
     table = table.merge(aggregation,on="renabap",how="left",validate="one_to_one")
-    for column in ("usuarios_registrados","sin_historial","bajo_persistente","posibles_irregulares"):
+    for column in ("usuarios_registrados","sin_historial","bajo_persistente","posibles_irregulares","usuarios_criticos","usuarios_estadistica_grafico","bajo_persistente_grafico","sin_historial_grafico","otros_registrados_grafico"):
         table[column] = table[column].fillna(0).astype(int)
     observed = detail.loc[detail.consumo_ultimo.notna()].groupby("renabap").usuario_id.nunique()
     eligible = detail.loc[detail.consumo_ultimo.ge(MIN_CONSUMPTION)].groupby("renabap").agg(usuarios_estadistica=("usuario_id","nunique"), mediana_consumo=("consumo_ultimo","median"))
@@ -65,10 +75,11 @@ def neighborhood_comparison_chart(visible):
                         subplot_titles=("Tipo de consumo", "Acceso al servicio"))
     fig.update_annotations(font_size=12)
     categories = [
-        ("usuarios_estadistica","Consumo ≥100","#30598F"),
-        ("otros_registrados","Bajo aislado / sin dato reciente","#CFD9E6"),
-        ("bajo_persistente","Consumo <100 por ≥4 meses","#FFC600"),
-        ("sin_historial","Sin registros de consumo","#B7474C"),
+        ("usuarios_estadistica_grafico","Consumo ≥100","#30598F"),
+        ("otros_registrados_grafico","Bajo aislado / sin dato reciente","#CFD9E6"),
+        ("bajo_persistente_grafico","Consumo <100 por ≥4 meses","#FFC600"),
+        ("sin_historial_grafico","Sin registros de consumo","#8F6A6C"),
+        ("usuarios_criticos","Crítico · mediana >1.000","#D13C42"),
     ]
     for column,label,color in categories:
         shares = visible[column] / visible.usuarios_registrados.replace(0,float("nan")) * 100
@@ -120,7 +131,7 @@ def render_neighborhoods(dataset, selected_neighborhoods, csv_bytes):
     st.markdown('<div class="barrio-note"><b>Dos lecturas diferentes:</b> los casos a revisar se cuentan entre usuarios registrados; la cantidad sin medidor es una brecha estimada de viviendas frente al padrón. Tener consumo bajo o ausente no confirma una conexión irregular.</div>',unsafe_allow_html=True)
 
     st.markdown("### Consumo y acceso al servicio, barrio por barrio")
-    st.caption("Una fila por barrio: ambos paneles van de 0 a 100%. A la izquierda, tipos de consumo entre usuarios registrados; a la derecha, acceso al servicio sobre familias estimadas. Los números dentro de las barras son cantidades. Al final de cada fila figura el total de familias estimadas, usando el dato de viviendas de la fuente.")
+    st.caption("Una fila por barrio: ambos paneles van de 0 a 100%. A la izquierda, tipos de consumo entre usuarios registrados; en rojo, usuarios críticos cuya mediana histórica de consumos válidos es mayor a 1.000. A la derecha, acceso al servicio sobre familias estimadas. Los números dentro de las barras son cantidades. Al final de cada fila figura el total de familias estimadas, usando el dato de viviendas de la fuente.")
     order = st.radio("Ordenar barrios por",["Cantidad de casos a revisar","Porcentaje de usuarios","Viviendas sin servicio estimadas","Usuarios registrados"],horizontal=True,key="barrio_ranking")
     sort_column = {"Cantidad de casos a revisar":"posibles_irregulares","Porcentaje de usuarios":"incidencia_pct","Viviendas sin servicio estimadas":"sin_medidor_estimado","Usuarios registrados":"usuarios_registrados"}[order]
     ordered = table.sort_values([sort_column,"renabap"],ascending=[False,True],na_position="last")
@@ -148,24 +159,25 @@ def render_neighborhoods(dataset, selected_neighborhoods, csv_bytes):
     else:
         fig = neighborhood_comparison_chart(visible)
         plot(fig,"barrio_consumption_and_service",max(560,len(visible)*48+300))
-        st.caption("Recorré todos los barrios con las flechas, de a 15 y en el mismo orden en ambos paneles. ‘Sin registros de consumo’ significa que el usuario existe en el padrón pero no tiene consumo en todo el historial. El gris incluye consumo bajo aislado o ausencia de dato reciente con historial previo.")
+        st.caption("Recorré todos los barrios con las flechas, de a 15 y en el mismo orden en ambos paneles. En rojo se muestran los usuarios con mediana histórica mayor a 1.000, calculada sobre sus consumos ≥100. Cada usuario aparece en una sola categoría. ‘Sin registros de consumo’ significa que existe en el padrón pero no tiene consumo en todo el historial. El gris incluye consumo bajo aislado o ausencia de dato reciente con historial previo.")
     st.caption("Familias estimadas: se usa ‘Viviendas Estimadas’ como aproximación, con un usuario por vivienda. Sin servicio estimado = máximo(viviendas estimadas − usuarios registrados, 0). Si el padrón supera la estimación, la cobertura se muestra en 100% y se conserva la cantidad real de usuarios. Sin estimación válida no se dibuja la barra de acceso. No es una verificación territorial del servicio.")
 
     st.markdown("### Ficha del barrio")
     names = table.set_index("renabap").etiqueta.to_dict()
     chosen = st.selectbox("Barrio",table.renabap.tolist(),format_func=lambda value:names[value],key="barrio_detail")
     row = table.loc[table.renabap.eq(chosen)].iloc[0]
-    a,b,c = st.columns(3)
+    a,b,c,d = st.columns(4)
     a.metric("Consumidores con registro · último período",fmt(row.consumidores_con_registro))
-    b.metric("Consumo bajo persistente",fmt(row.bajo_persistente))
-    c.metric("Sin registros en todo el historial",fmt(row.sin_historial))
+    b.metric("Usuarios críticos · mediana >1.000",fmt(row.usuarios_criticos),help="Mediana histórica por usuario calculada con sus consumos ≥100.")
+    c.metric("Consumo bajo persistente",fmt(row.bajo_persistente))
+    d.metric("Sin registros en todo el historial",fmt(row.sin_historial))
     a,b,c = st.columns(3)
     a.metric("Mediana de consumo · ≥100",fmt(row.mediana_consumo,2))
     b.metric("Incidencia de casos a revisar",fmt(row.incidencia_pct,2)+"%" if pd.notna(row.incidencia_pct) else "Sin base")
     c.metric("Brecha sin medidor · estimada",fmt(row.sin_medidor_estimado))
     st.caption(f"{fmt(row.usuarios_registrados)} usuarios registrados · {fmt(row.viviendas_estimadas)} viviendas estimadas · {fmt(row.usuarios_estadistica)} usuarios incluidos en la mediana · Tipo PASE: {row.tipo_pase}.")
 
-    labels = {"renabap":"RENABAP","barrio":"Barrio","localidad":"Localidad","tipo_pase":"Tipo PASE","periodo_consumido":"Período consumido de referencia","viviendas_estimadas":"Viviendas estimadas · fuente","usuarios_registrados":"Usuarios registrados","consumidores_con_registro":"Usuarios con registro · último período","usuarios_estadistica":"Usuarios con consumo ≥100 · último período","mediana_consumo":"Mediana de consumo · ≥100","bajo_persistente":"Consumo <100 persistente · usuarios","sin_historial":"Sin registros en todo el historial · usuarios","posibles_irregulares":"Casos a revisar · usuarios","incidencia_pct":"Incidencia · % de usuarios registrados","sin_medidor_estimado":"Sin medidor · brecha estimada","brecha_sin_medidor_pct":"Brecha · % de viviendas estimadas","sin_dato_ultimo_con_historia":"Sin dato último período · con historial","usuarios_sobre_estimacion":"Usuarios por encima de viviendas estimadas"}
+    labels = {"renabap":"RENABAP","barrio":"Barrio","localidad":"Localidad","tipo_pase":"Tipo PASE","periodo_consumido":"Período consumido de referencia","viviendas_estimadas":"Viviendas estimadas · fuente","usuarios_registrados":"Usuarios registrados","consumidores_con_registro":"Usuarios con registro · último período","usuarios_estadistica":"Usuarios con consumo ≥100 · último período","mediana_consumo":"Mediana de consumo · ≥100","usuarios_criticos":"Usuarios críticos · mediana histórica >1.000","bajo_persistente":"Consumo <100 persistente · usuarios","sin_historial":"Sin registros en todo el historial · usuarios","posibles_irregulares":"Casos a revisar · usuarios","incidencia_pct":"Incidencia · % de usuarios registrados","sin_medidor_estimado":"Sin medidor · brecha estimada","brecha_sin_medidor_pct":"Brecha · % de viviendas estimadas","sin_dato_ultimo_con_historia":"Sin dato último período · con historial","usuarios_sobre_estimacion":"Usuarios por encima de viviendas estimadas"}
     export = table[list(labels)].rename(columns=labels)
     st.markdown("### Todos los barrios de la selección")
     st.dataframe(export,hide_index=True,width="stretch",column_config={"Incidencia · % de usuarios registrados":st.column_config.ProgressColumn(format="%.2f%%",min_value=0,max_value=100),"Brecha · % de viviendas estimadas":st.column_config.ProgressColumn(format="%.2f%%",min_value=0,max_value=100),"Mediana de consumo · ≥100":st.column_config.NumberColumn(format="%.2f")})
@@ -180,6 +192,7 @@ def render_neighborhoods(dataset, selected_neighborhoods, csv_bytes):
         - **Consumo bajo persistente:** menos de 100 en al menos dos bimestres consecutivos, terminando en el último período disponible. Son cuatro meses; un período faltante corta la secuencia.
         - **Sin consumo:** sin registros válidos en todo el historial disponible. Tener historial y no tener dato en el último período se informa aparte.
         - **Casos a revisar:** unión sin duplicados de bajo consumo persistente y ausencia de historial. Es el criterio solicitado para identificar posibles ‘colgados’, no una constatación de conexión irregular.
+        - **Usuarios críticos:** usuarios cuya mediana histórica individual es mayor a 1.000, calculada solo con sus consumos ≥100. En el gráfico se muestran en rojo y se priorizan como una categoría exclusiva, para que cada usuario se cuente una sola vez.
         - **Sin medidor estimado:** máximo(viviendas estimadas − usuarios registrados, 0), barrio por barrio. Los datos no permiten contar medidores ausentes de forma directa.
         - **Mediana:** consumo del último bimestre entre usuarios con valor ≥100. Los valores bajos se usan para las incidencias, pero no para la mediana.
         """)
