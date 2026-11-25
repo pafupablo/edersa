@@ -1,6 +1,6 @@
 # EdERSA · Explorador de usuarios
 
-Aplicación Streamlit de lectura que relaciona las cuatro planillas de la carpeta Estructural, las soluciones territoriales y el formulario de producción con su tabla de personas. Incluye caracterización de hogares, panorama, fichas, comparación de consumos y revisión de vínculos pendientes.
+Aplicación Streamlit de lectura que relaciona las planillas de la carpeta Estructural, la fecha de alta de usuarios, las soluciones territoriales y el formulario de producción con su tabla de personas. Incluye caracterización de hogares, panorama, fichas, comparación de consumos y revisión de vínculos pendientes.
 
 ## Abrir la versión local
 
@@ -20,7 +20,7 @@ La copia en `data/` sirve para revisar la aplicación con los datos leídos el 1
 
 1. Crear o seleccionar un proyecto en Google Cloud y habilitar **Google Sheets API** y **Google Drive API**. Esta solución no utiliza BigQuery ni necesita recursos de pago.
 2. Crear una cuenta de servicio para lectura y una clave JSON. Guardar esa clave de forma privada. No incluirla en GitHub ni enviarla por chat.
-3. Compartir los cuatro Sheets, el Excel de soluciones y Formulario EdERSA como **Lector** con el `client_email` de esa cuenta. No hace falta hacer públicos los archivos ni convertir el Excel.
+3. Compartir los Sheets —incluido **Usuarios Alta**—, el Excel de soluciones y Formulario EdERSA como **Lector** con el `client_email` de esa cuenta. No hace falta hacer públicos los archivos ni convertir el Excel.
 4. Usar `.streamlit/secrets.toml.example` como guía y completar `[gcp_service_account]` con los datos de la clave. En local, guardarlo como `.streamlit/secrets.toml`. Online, pegarlo directamente en **Settings → Secrets** de Streamlit.
 5. Abrir la aplicación y elegir **Google Sheets + Drive**. Verificar los recuentos en **Fuentes y calidad**.
 
@@ -64,6 +64,7 @@ El vínculo con el padrón usa NIS exacto y RENABAP cuando está disponible. Un 
 
 - Universo: **Usuarios general**, 9.527 filas en la revisión inicial. La clave es `Usua_ID`.
 - Consumos y GPS se vinculan por `Usua_ID`. **No se cruza por NIS**, porque se repite en algunos usuarios.
+- **Usuarios Alta** se vincula por `Usua_ID`. La columna `Alta` usa el formato de la fuente mes/día/año; los valores vacíos, no interpretables o conflictivos no se estiman.
 - `id_renabap por poligono` se relaciona con `ID Renabap` en Barrios.
 - `Subt_coord` contiene longitud y `Sibt_coord` latitud en la fuente actual.
 - La etiqueta fuente `oct-24` es el mes facturado: el período consumido mostrado es agosto–septiembre de 2024. `feb-26` se muestra como diciembre de 2025–enero de 2026. Se conserva el mes facturado en `periodo_facturado` y la etiqueta original en `bimestre_fuente`; `periodo` es el inicio del período consumido, dos meses antes. Se lee el texto formateado, no el serial subyacente de Sheets.
@@ -72,6 +73,12 @@ El vínculo con el padrón usa NIS exacto y RENABAP cuando está disponible. Un 
 - No se confirmó la unidad física de la columna Consumo; se evita etiquetar los valores como kWh hasta confirmarla.
 - La ficha representa un **usuario/suministro**. Todavía no existe un padrón que confirme su equivalencia con hogares o viviendas.
 - La fuente territorial agrega soluciones, fechas y estados individuales. Se leen solo A:L de la pestaña solicitada; no se importan emails, teléfonos, DNI, deudas ni sus tablas auxiliares. Los campos posteriores de caracterización de vivienda no se integran en esta versión.
+
+### Antigüedad de usuarios
+
+La antigüedad se calcula desde `Alta` hasta el cierre del último bimestre consumido de la ventana seleccionada, no hasta la fecha actual. El indicador principal cuenta las altas ocurridas dentro de ese bimestre y muestra su participación entre los usuarios con fecha conocida que ya estaban vigentes al cierre. También informa la mediana de meses completos y distribuye la selección en altas del bimestre, altas previas de hasta seis meses, 7–12 meses, 1–2 años y más de dos años. Las altas posteriores al período se muestran por separado; las fechas faltantes no se imputan. La ficha y la descarga de usuarios conservan la fecha y la antigüedad de referencia.
+
+La copia de prueba no incorpora fechas de alta personales. Para revisar este indicador localmente se puede descargar **Usuarios Alta** como CSV y cargarlo desde la barra lateral; el archivo se usa solo durante la sesión y no se agrega a Git.
 
 ## Intervenciones territoriales
 

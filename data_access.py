@@ -9,17 +9,30 @@ SOURCES = json.loads((ROOT / "sources.json").read_text(encoding="utf-8"))
 
 
 def local_available():
-    return (ROOT / "trial_snapshot.zip").exists() or all((ROOT / "data" / f"{key}.json").exists() for key in SOURCES)
+    required = [key for key, source in SOURCES.items() if not source.get("optional_local")]
+    return (ROOT / "trial_snapshot.zip").exists() or all((ROOT / "data" / f"{key}.json").exists() for key in required)
+
+
+def empty_optional_source(source):
+    return [source.get("empty_headers", [])]
 
 
 def load_local():
     snapshot_zip = ROOT / "trial_snapshot.zip"
     if snapshot_zip.exists():
         with ZipFile(snapshot_zip) as archive:
-            raw = {key: json.loads(archive.read(f"{key}.json")) for key in SOURCES}
+            names = set(archive.namelist())
+            raw = {
+                key: json.loads(archive.read(f"{key}.json")) if f"{key}.json" in names else empty_optional_source(source)
+                for key, source in SOURCES.items()
+            }
             metadata = json.loads(archive.read("snapshot.json"))
         return raw, metadata.get("fetched_at", "Copia de prueba sin fecha")
-    raw = {key: json.loads((ROOT / "data" / f"{key}.json").read_text(encoding="utf-8")) for key in SOURCES}
+    raw = {
+        key: json.loads((ROOT / "data" / f"{key}.json").read_text(encoding="utf-8"))
+        if (ROOT / "data" / f"{key}.json").exists() else empty_optional_source(source)
+        for key, source in SOURCES.items()
+    }
     metadata_path = ROOT / "data" / "snapshot.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
     return raw, metadata.get("fetched_at", "Copia local sin fecha")

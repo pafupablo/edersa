@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+from io import BytesIO
 import json
 from pathlib import Path
 import pandas as pd
@@ -8,7 +9,7 @@ import plotly.express as px
 import streamlit as st
 
 from data_access import ROOT, SOURCES, load_local, load_sheets, local_available
-from model import DataError, UNKNOWN, build_dataset, evolution_statistics, group_statistics, label_period, general_consumption_trend, critical_consumption
+from model import DataError, UNKNOWN, USER_TENURE_ORDER, build_dataset, evolution_statistics, group_statistics, label_period, general_consumption_trend, critical_consumption, format_tenure, user_tenure_snapshot
 from sidebar_filters import filter_household_survey_status, pase_filter_label
 from charts import evolution_chart, individual_history_chart, trend_sparkline_svg
 from characterization import render_characterization, render_linked_household
@@ -75,11 +76,17 @@ def chart(fig, key=None, height=320, top_margin=15, plot_background="rgba(0,0,0,
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def cached_load(mode, model_version):
+def cached_load(mode, model_version, local_altas=None):
     if mode == "Google Sheets + Drive":
         raw, fetched_at = load_sheets(st.secrets["gcp_service_account"])
     else:
         raw, fetched_at = load_local()
+        if local_altas:
+            altas = pd.read_csv(BytesIO(local_altas), dtype=str, keep_default_na=False)
+            missing = {"Usua_ID", "Alta"} - set(altas.columns)
+            if missing:
+                raise DataError(f"Faltan columnas en el CSV Usuario Alta: {', '.join(sorted(missing))}.")
+            raw["usuarios_alta"] = [["Usua_ID", "Alta"]] + altas[["Usua_ID", "Alta"]].values.tolist()
     return build_dataset(raw), fetched_at
 
 
@@ -113,9 +120,18 @@ with st.sidebar:
         mode = options[0]
         st.session_state["source_mode"] = mode
 
+local_altas = None
+if mode == "Copia de prueba":
+    with st.sidebar:
+        st.divider()
+        st.caption("ANTIGÜEDAD · VISTA LOCAL")
+        altas_file = st.file_uploader("Usuario Alta · CSV", type=["csv"], help="Descargá como CSV la hoja Usuario Alta y cargala aquí. El archivo se usa solo en esta sesión y no se agrega a Git.")
+        if altas_file is not None:
+            local_altas = altas_file.getvalue()
+
 try:
     with st.spinner("Relacionando usuarios, barrios y consumos…"):
-        dataset, fetched_at = cached_load(mode, "household-details-roof-v3")
+        dataset, fetched_at = cached_load(mode, "user-tenure-v1", local_altas)
 except DataError as exc:
     source_controls(options, mode)
     st.error(str(exc))
@@ -253,6 +269,7 @@ raw_selected_c = c.loc[c.usuario_id.isin(filtered.usuario_id) & c.periodo.isin(p
 latest = periods[-1] if periods else None
 latest_c = selected_c.loc[selected_c.periodo.eq(latest)] if latest is not None else selected_c
 latest_raw = raw_selected_c.loc[raw_selected_c.periodo.eq(latest)] if latest is not None else raw_selected_c
+tenure_snapshot = user_tenure_snapshot(filtered, latest) if latest is not None else filtered.copy()
 if section not in ("Fuentes y calidad", "Intervenciones"):
     st.caption("Estadísticas: solo consumos ≥100; los menores a 100 se conservan en las fichas. Período consumido = los dos meses anteriores al mes facturado: feb-26 → dic-25 / ene-26. No se imputan faltantes como cero.")
 
@@ -280,6 +297,29 @@ if section == "Panorama":
     e.metric("Consumo mediano · último período", fmt(latest_c.consumo.median(), 2), help="Mediana entre usuarios con consumo ≥100; se excluyen faltantes y valores menores a 100.")
     st.caption(f"Período consumido: {label_period(latest)} · Cobertura estadística: {fmt(100 * latest_c.usuario_id.nunique() / len(filtered), 2)}% · Mediciones de consumo menores a 100 excluidas: {fmt(latest_raw.consumo.lt(100).sum())}.")
     st.caption(f"En la selección: {fmt(filtered.intervenciones_registros.gt(0).sum())} usuarios con registros de soluciones vinculados y {fmt(filtered.intervenciones_ejecutadas.gt(0).sum())} con ejecución marcada ‘sí’ en alguna fecha. Sin registro no equivale a ausencia de intervención.")
+    st.markdown("#### Antigüedad de usuarios · último bimestre")
+    known_dates = tenure_snapshot.fecha_alta.notna()
+    period_end = latest + pd.DateOffset(months=2) - pd.Timedelta(days=1)
+    known_as_of = known_dates & tenure_snapshot.fecha_alta.le(period_end)
+    recent = int(tenure_snapshot.alta_en_ultimo_bimestre.sum())
+    median_tenure = tenure_snapshot.loc[known_as_of, "antiguedad_meses"].median()
+    a, b, c, d = st.columns(4)
+    a.metric("Altas en el último bimestre", fmt(recent), help=f"Fecha de alta entre el inicio y el cierre de {label_period(latest)}.")
+    b.metric("Participación de altas recientes", f"{fmt(recent / known_as_of.sum() * 100, 2)}%" if known_as_of.any() else "Sin base", help="Altas del último bimestre sobre usuarios con fecha conocida y vigentes al cierre del período.")
+    c.metric("Antigüedad mediana al cierre", format_tenure(median_tenure), help="Mediana de meses completos desde el alta hasta el cierre del último bimestre.")
+    d.metric("Fecha de alta disponible", fmt(known_dates.sum()), delta=f"{fmt(known_dates.mean() * 100 if len(tenure_snapshot) else float('nan'), 2)}% de la selección", delta_color="off")
+    tenure_counts = tenure_snapshot.groupby("antiguedad_grupo", observed=False).size().reindex(USER_TENURE_ORDER, fill_value=0).rename("Usuarios").reset_index()
+    tenure_counts = tenure_counts.loc[tenure_counts.Usuarios.gt(0)]
+    if known_dates.any():
+        tenure_colors = {"Alta en último bimestre":"#FFC600", "Alta posterior al período":"#B7474C", "Sin fecha de alta":"#CFD9E6"}
+        fig = px.bar(tenure_counts, y="antiguedad_grupo", x="Usuarios", orientation="h", color="antiguedad_grupo", color_discrete_map=tenure_colors, text="Usuarios", labels={"antiguedad_grupo":"", "Usuarios":"Usuarios"})
+        fig.update_traces(textposition="outside", texttemplate="%{x:,.0f}", cliponaxis=False)
+        fig.update_layout(showlegend=False)
+        chart(fig, "user_tenure_latest_period", height=380)
+        future = int(tenure_snapshot.fecha_alta.gt(period_end).sum())
+        st.caption(f"Referencia: cierre de {label_period(latest)} ({period_end:%d/%m/%Y}). Las altas posteriores al cierre ({fmt(future)}) se muestran aparte y no reciben antigüedad en ese período. Los faltantes no se estiman.")
+    else:
+        st.info("La copia local no incluye fechas de alta. Para revisar este indicador antes de publicar, descargá la hoja ‘Usuarios alta’ como CSV y cargala en el control de la izquierda.")
     st.markdown("#### Evolución del consumo · mediana y media")
     if selected_c.empty:
         st.info("No hay consumos ≥100 para la selección y la ventana elegida.")
@@ -313,6 +353,9 @@ elif section == "Usuarios y fichas":
     medians = selected_c.groupby("usuario_id").consumo.median()
     view["mediana_usuario"] = view.usuario_id.map(medians)
     view["cantidad_consumos"] = view.usuario_id.map(raw_selected_c.groupby("usuario_id").size()).fillna(0).astype(int)
+    tenure_by_user = tenure_snapshot.set_index("usuario_id")
+    view["antiguedad_meses"] = view.usuario_id.map(tenure_by_user.antiguedad_meses)
+    view["antiguedad_grupo"] = view.usuario_id.map(tenure_by_user.antiguedad_grupo.astype("object"))
     executed_events = interventions.loc[interventions.vinculo.eq("Confirmado") & ~interventions.duplicado_exacto & interventions.estado.eq("Ejecutada")]
     executed_labels = executed_events.groupby("usuario_id").solucion.agg(lambda values: "; ".join(sorted(set(values))))
     view["ejecuciones_etiquetas"] = view.usuario_id.map(executed_labels).fillna("Sin ejecución registrada")
@@ -331,7 +374,10 @@ elif section == "Usuarios y fichas":
     configs[4] = st.column_config.NumberColumn(width=75,help="Cantidad de registros de consumo en la ventana seleccionada, incluidos los menores a 100.",format="%d")
     configs[5] = st.column_config.TextColumn(width=100,help="Indica si la mediana, el último consumo o ambos superan 1000. Exactamente 1000 no se considera crítico.")
     event = st.dataframe(styled_listing, hide_index=True, width="stretch", height=350, row_height=30, on_select="rerun", selection_mode="single-row", column_config=configs, key="user_table_" + str(pd.util.hash_pandas_object(listing[["Usua_ID"]]).sum()))
-    st.download_button("Descargar selección · CSV", csv_bytes(listing), "edersa_usuarios.csv", "text/csv", key="download_users")
+    listing_export = listing.copy()
+    listing_export.insert(2, "Fecha de alta", view.fecha_alta.map(lambda value: value.strftime("%d/%m/%Y") if pd.notna(value) else UNKNOWN))
+    listing_export.insert(3, f"Antigüedad al cierre · {label_period(latest)}", view.antiguedad_meses.map(format_tenure))
+    st.download_button("Descargar selección · CSV", csv_bytes(listing_export), "edersa_usuarios.csv", "text/csv", key="download_users")
     selected_rows = event.selection.rows
     default_index = selected_rows[0] if selected_rows and selected_rows[0] < len(view) else 0
     options_ids = view.usuario_id.tolist()
@@ -360,7 +406,7 @@ elif section == "Usuarios y fichas":
     left, right = st.columns([1, 1.5])
     with left:
         st.markdown("#### Caracterización disponible")
-        attrs = {"NIS": row.nis, "Gas":row.gas, "Localidad": row.localidad, "Departamento": row.departamento, "RENABAP": row.renabap or UNKNOWN, "Uso": row.uso, "Categoría · código": row.categoria, "Programa": row.programa_grupo, "Tipo PASE": row.tipo_pase}
+        attrs = {"NIS": row.nis, "Fecha de alta": row.fecha_alta.strftime("%d/%m/%Y") if pd.notna(row.fecha_alta) else UNKNOWN, f"Antigüedad al cierre · {label_period(latest)}": format_tenure(row.antiguedad_meses), "Gas":row.gas, "Localidad": row.localidad, "Departamento": row.departamento, "RENABAP": row.renabap or UNKNOWN, "Uso": row.uso, "Categoría · código": row.categoria, "Programa": row.programa_grupo, "Tipo PASE": row.tipo_pase}
         st.dataframe(pd.DataFrame(attrs.items(), columns=["Variable", "Valor"]), hide_index=True, width="stretch")
         if row.nis_repetido:
             st.warning("Este NIS aparece en más de un usuario. No se asume que representan hogares distintos.")

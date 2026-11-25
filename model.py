@@ -11,6 +11,15 @@ from surveys import SurveyDataset, build_surveys
 UNKNOWN = "Sin información"
 NO_BARRIO = "Sin barrio vinculado"
 MIN_CONSUMPTION = 100
+USER_TENURE_ORDER = [
+    "Alta en último bimestre",
+    "Alta previa · hasta 6 meses",
+    "7–12 meses",
+    "1–2 años",
+    "Más de 2 años",
+    "Alta posterior al período",
+    "Sin fecha de alta",
+]
 PASE_FILTER_LABELS = {
     "BLANDO": "PASE blando",
     "DURO": "PASE duro",
@@ -59,6 +68,7 @@ def general_consumption_trend(history, periods):
 
 HEADERS = {
     "usuarios": ["Usua_ID", "NIS", "Categoría", "Uso", "Programa", "Departamento por poligono", "id_renabap por poligono", "Hogares Sin Gas"],
+    "usuarios_alta": ["Usua_ID", "Alta"],
     "gps": ["Usua_ID", "NIS", "Subt_coord", "Sibt_coord"],
     "consumo": ["Usua_ID", "Bimestre", "Consumo"],
     "barrios": ["ID Renabap", "Barrio", "Localidad", "Departamento", "Provincia", "Viviendas Estimadas", "PASE", "Tipo PASE", "Barrios para comparar"],
@@ -119,6 +129,61 @@ def label_period(value):
     return f"{names[value.month - 1]}-{str(value.year)[-2:]} / {names[end.month - 1]}-{str(end.year)[-2:]}"
 
 
+def user_date(value):
+    """Parse the source's US-formatted user start date without guessing day/month."""
+    if value is None or pd.isna(value) or not text(value):
+        return pd.NaT
+    if isinstance(value, (pd.Timestamp,)):
+        return value.normalize()
+    if isinstance(value, (int, float)) and 20000 <= float(value) <= 80000:
+        return (pd.Timestamp("1899-12-30") + pd.to_timedelta(float(value), unit="D")).normalize()
+    source = text(value)
+    for date_format in ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d"):
+        parsed = pd.to_datetime(source, format=date_format, errors="coerce")
+        if pd.notna(parsed):
+            return parsed.normalize()
+    return pd.NaT
+
+
+def user_tenure_snapshot(users, period_start):
+    """Classify user tenure at the close of a consumed two-month period."""
+    result = users.copy()
+    result["fecha_alta"] = pd.to_datetime(result.get("fecha_alta"), errors="coerce")
+    if pd.isna(period_start):
+        result["antiguedad_meses"] = float("nan")
+        result["antiguedad_grupo"] = "Sin período de referencia"
+        result["alta_en_ultimo_bimestre"] = False
+        return result
+    start = pd.Timestamp(period_start).normalize()
+    end = start + pd.DateOffset(months=2) - pd.Timedelta(days=1)
+    dates = result.fecha_alta
+    known_as_of = dates.notna() & dates.le(end)
+    months = (end.year - dates.dt.year) * 12 + end.month - dates.dt.month - dates.dt.day.gt(end.day).astype("Int64")
+    result["antiguedad_meses"] = months.where(known_as_of).astype("Float64")
+    result["alta_en_ultimo_bimestre"] = dates.between(start, end, inclusive="both").fillna(False)
+    group = pd.Series("Sin fecha de alta", index=result.index, dtype="object")
+    group.loc[dates.gt(end)] = "Alta posterior al período"
+    group.loc[known_as_of & result.antiguedad_meses.gt(24)] = "Más de 2 años"
+    group.loc[known_as_of & result.antiguedad_meses.between(13, 24)] = "1–2 años"
+    group.loc[known_as_of & result.antiguedad_meses.between(7, 12)] = "7–12 meses"
+    group.loc[known_as_of & result.antiguedad_meses.le(6)] = "Alta previa · hasta 6 meses"
+    group.loc[result.alta_en_ultimo_bimestre] = "Alta en último bimestre"
+    result["antiguedad_grupo"] = pd.Categorical(group, categories=USER_TENURE_ORDER, ordered=True)
+    return result
+
+
+def format_tenure(months):
+    if pd.isna(months):
+        return UNKNOWN
+    total = max(0, int(months))
+    years, remainder = divmod(total, 12)
+    if years and remainder:
+        return f"{years} {'año' if years == 1 else 'años'} y {remainder} {'mes' if remainder == 1 else 'meses'}"
+    if years:
+        return f"{years} {'año' if years == 1 else 'años'}"
+    return f"{remainder} {'mes' if remainder == 1 else 'meses'}"
+
+
 def frame(rows, key):
     if not rows:
         raise DataError(f"La fuente {key} está vacía.")
@@ -157,6 +222,7 @@ class Dataset:
 def build_dataset(raw):
     frames = {key: frame(raw[key], key) for key in HEADERS}
     u, c, g, b = [frames[k].copy() for k in ("usuarios", "consumo", "gps", "barrios")]
+    altas = frames["usuarios_alta"].copy()
     counts = {k: len(v) for k, v in frames.items()}
     for df in (u, c, g):
         df["Usua_ID"] = df["Usua_ID"].map(identifier)
@@ -178,6 +244,18 @@ def build_dataset(raw):
         u[col] = u[col].map(text).map(identifier).replace("", UNKNOWN)
     u["programa_grupo"] = u.programa.map(lambda v: UNKNOWN if v == UNKNOWN else "300" if v == "300" else "No 300")
     u["gas"] = u["gas_fuente"].map(lambda v: "Sin gas" if fold(v) == "sin gas" else UNKNOWN if not text(v) else text(v))
+    altas = altas.rename(columns={"Usua_ID": "usuario_id", "Alta": "alta_fuente"})
+    altas["usuario_id"] = altas.usuario_id.map(identifier)
+    altas["alta_fuente"] = altas.alta_fuente.map(text)
+    altas["fecha_alta"] = altas.alta_fuente.map(user_date)
+    altas_invalidas = altas.loc[altas.usuario_id.ne("") & altas.alta_fuente.ne("") & altas.fecha_alta.isna()].copy()
+    altas_validas = altas.loc[altas.usuario_id.ne("") & altas.fecha_alta.notna(), ["usuario_id", "fecha_alta"]].drop_duplicates()
+    fechas_por_usuario = altas_validas.groupby("usuario_id").fecha_alta.nunique()
+    altas_conflictivas_ids = fechas_por_usuario.loc[fechas_por_usuario.gt(1)].index
+    altas_conflictivas = altas.loc[altas.usuario_id.isin(altas_conflictivas_ids)].copy()
+    mapa_altas = altas_validas.loc[~altas_validas.usuario_id.isin(altas_conflictivas_ids)].drop_duplicates("usuario_id")
+    altas_sin_usuario = altas.loc[altas.usuario_id.ne("") & ~altas.usuario_id.isin(u.usuario_id)].copy()
+    u = u.merge(mapa_altas, on="usuario_id", how="left", validate="one_to_one")
     unknown_b = u.loc[u.renabap.ne("") & ~u.renabap.isin(b.renabap)].copy()
     u = u.merge(b, on="renabap", how="left", validate="many_to_one", indicator="barrio_cruce")
     u["barrio_vinculado"] = u.barrio_cruce.eq("both")
@@ -211,6 +289,9 @@ def build_dataset(raw):
     mismatch = u.nis_gps.notna() & u.nis.ne(u.nis_gps)
     u["nis_gps_distinto"] = mismatch
     issues = {
+        "Fechas de alta no interpretables": altas_invalidas,
+        "Fechas de alta conflictivas": altas_conflictivas,
+        "Altas sin usuario": altas_sin_usuario,
         "RENABAP sin correspondencia": unknown_b,
         "Consumos excluidos": excluded_c,
         "Consumos sin usuario": orphan_c,
@@ -220,6 +301,10 @@ def build_dataset(raw):
         "NIS repetido en usuarios": u.loc[u.nis_repetido, ["usuario_id", "nis"]],
     }
     quality = pd.DataFrame([
+        {"Control": "Usuarios sin fecha de alta", "Cantidad": int(u.fecha_alta.isna().sum()), "Criterio": "No se estima la antigüedad cuando falta la fecha, es inválida o hay fechas conflictivas."},
+        {"Control": "Fechas de alta no interpretables", "Cantidad": len(altas_invalidas), "Criterio": "Se conserva el valor original para revisión; no se adivina día y mes."},
+        {"Control": "Usuarios con fechas de alta conflictivas", "Cantidad": int(len(altas_conflictivas_ids)), "Criterio": "Más de una fecha distinta para el mismo Usua_ID; no se elige una por suposición."},
+        {"Control": "Altas sin usuario", "Cantidad": len(altas_sin_usuario), "Criterio": "El Usua_ID no existe en el padrón principal y no se incorpora al universo."},
         {"Control": "Usuarios sin consumo válido", "Cantidad": int((~u.tiene_consumo).sum()), "Criterio": "No se imputa consumo cero."},
         {"Control": "Mediciones de consumo menores a 100", "Cantidad": int(c.consumo.lt(MIN_CONSUMPTION).sum()), "Criterio": "Se conservan en las fichas; no entran en estadísticas ni en su cantidad de mediciones de consumo."},
         {"Control": "Usuarios sin GPS válido", "Cantidad": int((~u.tiene_gps).sum()), "Criterio": "La ficha sigue disponible."},

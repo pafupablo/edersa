@@ -5,6 +5,14 @@
     "worksheet": "usuarios",
     "range": "A:H"
   },
+  "usuarios_alta": {
+    "title": "Usuarios Alta",
+    "id": "16FNcv2-SC5rvNmORCR1PJVNpjJqmcEmjeuHP1ugdPMw",
+    "worksheet": "Usuarios alta",
+    "range": "A:B",
+    "optional_local": true,
+    "empty_headers": ["Usua_ID", "Alta"]
+  },
   "consumo": {
     "title": "Consumo",
     "id": "15ydA2PnFiuIXnf80VYZlGY71ydfBTmpfS0IKsbuDnS0",
