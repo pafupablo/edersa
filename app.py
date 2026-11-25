@@ -286,7 +286,7 @@ if section == "Panorama":
     else:
         chart(evolution_chart(summary), "evolution", height=680, top_margin=105, plot_background="#EEF3F8")
         st.caption("Arriba: mediana, media y 50% central del consumo bimestral, en la unidad de la fuente. Abajo: cantidad de usuarios (Usua_ID únicos) con consumo ≥100. Son ejes y magnitudes diferentes.")
-        st.caption("❄️ Banda blanca: invierno (junio–agosto). ☀️ Banda amarilla: verano (diciembre–febrero). Las bandas siguen los meses consumidos; cada punto corresponde a un bimestre.")
+        st.caption("❄️ Banda blanca: invierno austral (21 de junio–20 de septiembre). ☀️ Banda amarilla: verano austral (21 de diciembre–20 de marzo). Cada punto corresponde al total de un bimestre completo.")
         st.caption("El cursor informa la variación porcentual de la mediana respecto al período anterior y la cobertura de usuarios. La banda P25–P75 describe dispersión, no un intervalo de confianza.")
         st.caption("La cantidad de usuarios incluidos cambia por período. La evolución no representa necesariamente un grupo fijo de usuarios.")
     evolution_columns = {"periodo":"Período consumido", "mediana":"Consumo · mediana", "promedio":"Consumo · media", "p25":"Consumo · P25", "p75":"Consumo · P75", "total":"Consumo · total de valores ≥100", "usuarios_padron":"Usuarios · padrón seleccionado", "usuarios_observados":"Usuarios · con registro en período", "usuarios":"Usuarios · incluidos (consumo ≥100)", "menores_100":"Usuarios · excluidos por consumo <100", "sin_registro_periodo":"Usuarios · sin registro en período", "cobertura":"Usuarios · cobertura estadística %", "variacion_mediana_pct":"Consumo · variación de mediana %"}
@@ -375,7 +375,7 @@ elif section == "Usuarios y fichas":
             fig = individual_history_chart(complete,full_history)
             chart(fig, "individual_history",height=420,top_margin=75,plot_background="#EEF3F8")
             st.caption("La línea punteada muestra la tendencia lineal general, calculada con todo el historial del usuario y consumos ≥100. Se dibuja solo entre registros válidos, sin proyectar a futuro. No es un ajuste por estacionalidad. Con menos de dos registros aptos no se calcula.")
-            st.caption("❄️ Banda blanca: invierno (junio–agosto). ☀️ Banda amarilla: verano (diciembre–febrero). Las bandas siguen los meses consumidos; cada punto corresponde a un bimestre.")
+            st.caption("❄️ Banda blanca: invierno austral (21 de junio–20 de septiembre). ☀️ Banda amarilla: verano austral (21 de diciembre–20 de marzo). Cada punto corresponde al total de un bimestre completo.")
             complete["criterio"] = complete.consumo.map(lambda v: "Sin dato" if pd.isna(v) else "Excluido de estadísticas (<100)" if v < 100 else "Incluido en estadísticas")
             history_display = complete.assign(periodo=complete.periodo.map(label_period)).rename(columns={"periodo": "Período consumido", "consumo": "Consumo", "criterio": "Uso estadístico"})
             history_display["Consumo"] = history_display["Consumo"].map(lambda value: fmt(value, 2))

@@ -11,7 +11,7 @@ def format_number(value, decimals=2):
 
 
 def add_season_bands(fig, periods, *, annotation_y=1.025, annotation_yref="paper", row=None, col=None):
-    """Show winter and summer over consumed months, optionally on one subplot."""
+    """Show austral winter and summer using their calendar start dates."""
     dates = pd.DatetimeIndex(pd.to_datetime(pd.Series(periods), errors="coerce").dropna())
     if dates.empty:
         return fig
@@ -19,8 +19,8 @@ def add_season_bands(fig, periods, *, annotation_y=1.025, annotation_yref="paper
     end = dates.max() + pd.DateOffset(months=2)
     for year in range(start.year - 1, end.year + 1):
         seasons = [
-            (pd.Timestamp(year, 6, 1), pd.Timestamp(year, 9, 1), "#FFFFFF", .9, "❄️"),
-            (pd.Timestamp(year, 12, 1), pd.Timestamp(year + 1, 3, 1), "#FFE16B", .45, "☀️"),
+            (pd.Timestamp(year, 6, 21), pd.Timestamp(year, 9, 21), "#FFFFFF", .9, "❄️"),
+            (pd.Timestamp(year, 12, 21), pd.Timestamp(year + 1, 3, 21), "#FFE16B", .45, "☀️"),
         ]
         for first, last, color, opacity, icon in seasons:
             lower, upper = max(start, first), min(end, last)

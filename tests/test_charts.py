@@ -2,7 +2,7 @@ import unittest
 
 import pandas as pd
 
-from charts import evolution_chart, format_number
+from charts import evolution_chart, format_number, individual_history_chart
 
 
 class EvolutionChartTests(unittest.TestCase):
@@ -38,10 +38,27 @@ class EvolutionChartTests(unittest.TestCase):
         fig = evolution_chart(self.summary)
         annotations = {annotation.text for annotation in fig.layout.annotations}
         colors = {shape.fillcolor for shape in fig.layout.shapes}
+        season_starts = {pd.Timestamp(shape.x0) for shape in fig.layout.shapes}
         self.assertIn("❄️", annotations)
         self.assertIn("☀️", annotations)
         self.assertIn("#FFFFFF", colors)
         self.assertIn("#FFE16B", colors)
+        self.assertIn(pd.Timestamp("2026-06-21"), season_starts)
+        self.assertIn(pd.Timestamp("2026-12-21"), season_starts)
+
+    def test_user_history_uses_exact_season_start_dates(self):
+        history = pd.DataFrame(
+            {
+                "periodo": pd.to_datetime(["2026-06-01", "2026-12-01"]),
+                "consumo": [500, 700],
+            }
+        )
+
+        fig = individual_history_chart(history)
+
+        season_starts = {pd.Timestamp(shape.x0) for shape in fig.layout.shapes}
+        self.assertIn(pd.Timestamp("2026-06-21"), season_starts)
+        self.assertIn(pd.Timestamp("2026-12-21"), season_starts)
 
 
 if __name__ == "__main__":
