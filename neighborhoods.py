@@ -53,7 +53,7 @@ def fmt(value, digits=0):
 
 
 def plot(fig, key, height=530):
-    fig.update_layout(template="plotly_white",height=height,margin=dict(l=8,r=100,t=200,b=40),font=dict(color="#36506B",size=11),paper_bgcolor="white",plot_bgcolor="white",legend=dict(orientation="h",y=1.16,yanchor="bottom",x=0,font=dict(size=10)),legend_title_text="")
+    fig.update_layout(template="plotly_white",height=height,margin=dict(l=8,r=100,t=200,b=40),font=dict(color="#36506B",size=11),paper_bgcolor="white",plot_bgcolor="white",legend=dict(orientation="h",y=1.16,yanchor="bottom",x=0,font=dict(size=10)),legend_title_text="",separators=",.")
     st.plotly_chart(fig,key=key,width="stretch",config={"displaylogo":False})
 
 
@@ -74,7 +74,7 @@ def neighborhood_comparison_chart(visible):
         shares = visible[column] / visible.usuarios_registrados.replace(0,float("nan")) * 100
         fig.add_trace(go.Bar(y=visible.etiqueta,x=shares,name=label,
             orientation="h",marker_color=color,legendgroup="consumo",text=visible[column].where(visible[column].gt(0),""),textposition="inside",
-            customdata=list(zip(visible[column],visible.usuarios_registrados)),hovertemplate=f"%{{y}}<br>{label}: %{{customdata[0]}} usuarios<br>%{{x:.1f}}% de %{{customdata[1]}} registrados<extra></extra>"),row=1,col=1)
+            customdata=list(zip(visible[column],visible.usuarios_registrados)),hovertemplate=f"%{{y}}<br>{label}: %{{customdata[0]:,.0f}} usuarios<br>%{{x:,.2f}}% de %{{customdata[1]:,.0f}} registrados<extra></extra>"),row=1,col=1)
     estimates = visible.viviendas_estimadas.where(visible.viviendas_estimadas.gt(0))
     covered = visible.usuarios_registrados.clip(upper=estimates)
     for column,label,color in [("usuarios_registrados","Usuarios registrados","#91B2D6"),("sin_medidor_estimado","Sin servicio · estimación","#FFC600")]:
@@ -82,7 +82,7 @@ def neighborhood_comparison_chart(visible):
         custom = list(zip(visible[column],visible.viviendas_estimadas,visible.usuarios_registrados))
         fig.add_trace(go.Bar(y=visible.etiqueta,x=shares,name=label,
             orientation="h",marker_color=color,legendgroup="servicio",text=visible[column].where(visible[column].gt(0),""),textposition="inside",
-            customdata=custom,hovertemplate=f"%{{y}}<br>{label}: %{{customdata[0]}}<br>Cobertura estimada: %{{x:.1f}}%<br>Familias estimadas (base viviendas): %{{customdata[1]}}<br>Usuarios registrados: %{{customdata[2]}}<extra></extra>"),row=1,col=2)
+            customdata=custom,hovertemplate=f"%{{y}}<br>{label}: %{{customdata[0]:,.0f}}<br>Cobertura estimada: %{{x:,.2f}}%<br>Familias estimadas (base viviendas): %{{customdata[1]:,.0f}}<br>Usuarios registrados: %{{customdata[2]:,.0f}}<extra></extra>"),row=1,col=2)
     for row in visible.itertuples():
         fig.add_annotation(x=1.04,xref="x2 domain",y=row.etiqueta,yref="y2",text=fmt(row.viviendas_estimadas),showarrow=False,xanchor="left",font=dict(size=11,color="#30598F"))
     fig.add_annotation(x=1.04,xref="x2 domain",y=1.04,yref="paper",text="Familias<br>estimadas",showarrow=False,xanchor="left",yanchor="bottom",font=dict(size=11,color="#30598F"))
@@ -111,12 +111,12 @@ def render_neighborhoods(dataset, selected_neighborhoods, csv_bytes):
     median = scoped.loc[scoped.consumo_ultimo.ge(MIN_CONSUMPTION),"consumo_ultimo"].median()
     a,b,c,d = st.columns(4)
     a.metric("Usuarios registrados",fmt(registered),help="Usua_ID únicos del padrón, con o sin registros de consumo.")
-    b.metric("Posibles colgados",fmt(flagged),delta=f"{fmt(flagged / registered * 100 if registered else float('nan'),1)}% de usuarios",delta_color="off",help="Criterio de datos: consumo <100 durante al menos dos bimestres consecutivos o sin registros en todo el historial. No constata conexión irregular.")
+    b.metric("Posibles colgados",fmt(flagged),delta=f"{fmt(flagged / registered * 100 if registered else float('nan'),2)}% de usuarios",delta_color="off",help="Criterio de datos: consumo <100 durante al menos dos bimestres consecutivos o sin registros en todo el historial. No constata conexión irregular.")
     gap_sum = table.sin_medidor_estimado.sum(min_count=1)
     estimated_sum = table.viviendas_estimadas.sum(min_count=1)
-    c.metric("Sin medidor · estimación",fmt(gap_sum),delta=f"{fmt(gap_sum / estimated_sum * 100 if estimated_sum > 0 else float('nan'),1)}% de viviendas estimadas",delta_color="off",help="Suma por barrio de máximo(viviendas estimadas − usuarios registrados, 0). No es una observación de medidores.")
-    d.metric("Mediana de consumo",fmt(median,1),help="Último período consumido; solo usuarios con consumo ≥100. No es el promedio de las medianas de los barrios.")
-    st.caption(f"Referencia de consumo: {label_period(reference)} · {fmt(len(table))} barrios · Incidencia de casos a revisar: {fmt(flagged / registered * 100 if registered else float('nan'),1)}% de los usuarios registrados.")
+    c.metric("Sin medidor · estimación",fmt(gap_sum),delta=f"{fmt(gap_sum / estimated_sum * 100 if estimated_sum > 0 else float('nan'),2)}% de viviendas estimadas",delta_color="off",help="Suma por barrio de máximo(viviendas estimadas − usuarios registrados, 0). No es una observación de medidores.")
+    d.metric("Mediana de consumo",fmt(median,2),help="Último período consumido; solo usuarios con consumo ≥100. No es el promedio de las medianas de los barrios.")
+    st.caption(f"Referencia de consumo: {label_period(reference)} · {fmt(len(table))} barrios · Incidencia de casos a revisar: {fmt(flagged / registered * 100 if registered else float('nan'),2)}% de los usuarios registrados.")
     st.markdown('<div class="barrio-note"><b>Dos lecturas diferentes:</b> los casos a revisar se cuentan entre usuarios registrados; la cantidad sin medidor es una brecha estimada de viviendas frente al padrón. Tener consumo bajo o ausente no confirma una conexión irregular.</div>',unsafe_allow_html=True)
 
     st.markdown("### Consumo y acceso al servicio, barrio por barrio")
@@ -160,15 +160,15 @@ def render_neighborhoods(dataset, selected_neighborhoods, csv_bytes):
     b.metric("Consumo bajo persistente",fmt(row.bajo_persistente))
     c.metric("Sin registros en todo el historial",fmt(row.sin_historial))
     a,b,c = st.columns(3)
-    a.metric("Mediana de consumo · ≥100",fmt(row.mediana_consumo,1))
-    b.metric("Incidencia de casos a revisar",fmt(row.incidencia_pct,1)+"%" if pd.notna(row.incidencia_pct) else "Sin base")
+    a.metric("Mediana de consumo · ≥100",fmt(row.mediana_consumo,2))
+    b.metric("Incidencia de casos a revisar",fmt(row.incidencia_pct,2)+"%" if pd.notna(row.incidencia_pct) else "Sin base")
     c.metric("Brecha sin medidor · estimada",fmt(row.sin_medidor_estimado))
     st.caption(f"{fmt(row.usuarios_registrados)} usuarios registrados · {fmt(row.viviendas_estimadas)} viviendas estimadas · {fmt(row.usuarios_estadistica)} usuarios incluidos en la mediana · Tipo PASE: {row.tipo_pase}.")
 
     labels = {"renabap":"RENABAP","barrio":"Barrio","localidad":"Localidad","tipo_pase":"Tipo PASE","periodo_consumido":"Período consumido de referencia","viviendas_estimadas":"Viviendas estimadas · fuente","usuarios_registrados":"Usuarios registrados","consumidores_con_registro":"Usuarios con registro · último período","usuarios_estadistica":"Usuarios con consumo ≥100 · último período","mediana_consumo":"Mediana de consumo · ≥100","bajo_persistente":"Consumo <100 persistente · usuarios","sin_historial":"Sin registros en todo el historial · usuarios","posibles_irregulares":"Casos a revisar · usuarios","incidencia_pct":"Incidencia · % de usuarios registrados","sin_medidor_estimado":"Sin medidor · brecha estimada","brecha_sin_medidor_pct":"Brecha · % de viviendas estimadas","sin_dato_ultimo_con_historia":"Sin dato último período · con historial","usuarios_sobre_estimacion":"Usuarios por encima de viviendas estimadas"}
     export = table[list(labels)].rename(columns=labels)
     st.markdown("### Todos los barrios de la selección")
-    st.dataframe(export,hide_index=True,width="stretch",column_config={"Incidencia · % de usuarios registrados":st.column_config.ProgressColumn(format="%.1f%%",min_value=0,max_value=100),"Brecha · % de viviendas estimadas":st.column_config.ProgressColumn(format="%.1f%%",min_value=0,max_value=100),"Mediana de consumo · ≥100":st.column_config.NumberColumn(format="%.1f")})
+    st.dataframe(export,hide_index=True,width="stretch",column_config={"Incidencia · % de usuarios registrados":st.column_config.ProgressColumn(format="%.2f%%",min_value=0,max_value=100),"Brecha · % de viviendas estimadas":st.column_config.ProgressColumn(format="%.2f%%",min_value=0,max_value=100),"Mediana de consumo · ≥100":st.column_config.NumberColumn(format="%.2f")})
     st.download_button("Descargar indicadores por barrio · CSV",csv_bytes(export),"edersa_indicadores_barrios.csv","text/csv")
     cases = scoped.loc[scoped.posible_irregularidad].copy()
     with st.expander("Ver usuarios que cumplen el criterio de revisión"):

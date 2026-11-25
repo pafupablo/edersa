@@ -21,11 +21,11 @@ def fmt(value, digits=0):
 
 
 def pct(value):
-    return fmt(value, 1) + "%" if pd.notna(value) else "Sin base"
+    return fmt(value, 2) + "%" if pd.notna(value) else "Sin base"
 
 
 def plot(fig, key, height=310):
-    fig.update_layout(template="plotly_white", height=height, margin=dict(l=8, r=26, t=15, b=25), font=dict(family="Arial", color="#36506B", size=12), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", legend_title_text="", legend=dict(orientation="h", y=1.12, x=0))
+    fig.update_layout(template="plotly_white", height=height, margin=dict(l=8, r=26, t=15, b=25), font=dict(family="Arial", color="#36506B", size=12), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", legend_title_text="", legend=dict(orientation="h", y=1.12, x=0), separators=",.")
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(gridcolor="#E6EDF2")
     st.plotly_chart(fig, key=key, width="stretch", config={"displaylogo": False})
@@ -76,7 +76,7 @@ def linked_household_html(row):
         card("Personas en el hogar",number("personas_cantidad"),f'Mayores: {number("personas_mayores_edad_cantidad")} · Menores: {number("menores_derivados")}'),
         card("Superficie construida",number("superficie_construida")+" m²" if value("superficie_construida")!="Sin dato" else "Sin dato"),
         card("Ambientes",number("ambientes_totales"),"Se cuentan todos los ambientes, no solo dormitorios."),
-        card("Personas por ambiente",fmt(ratio,1),crowd_label+" · crítico si supera 3 personas/ambiente.",tone="linked-alert" if crowded else ""),
+        card("Personas por ambiente",fmt(ratio,2),crowd_label+" · crítico si supera 3 personas/ambiente.",tone="linked-alert" if crowded else ""),
         card("Estado general",value("vivienda_estado_general")),
         card("Familias declaradas",number("familias_cantidad")),
     ])+'</div>'
@@ -152,7 +152,7 @@ def categorical(values, title, key, aliases=None, order=None, height=290, donut=
     palette = [BLUE, YELLOW, LIGHT, "#637693", "#D7A94A", GRAY]
     colors = [{"Bueno": BLUE, "Regular": YELLOW, "Malo": RED}.get(value, palette[i % len(palette)]) for i, value in enumerate(data.original)]
     if donut:
-        fig = go.Figure(go.Pie(labels=data.etiqueta, values=data.n, hole=.66, marker=dict(colors=colors, line=dict(color="white", width=2)), texttemplate="%{percent:.1%}", textposition="inside", hovertemplate="%{label}<br>%{value} respuestas · %{percent:.1%}<extra></extra>"))
+        fig = go.Figure(go.Pie(labels=data.etiqueta, values=data.n, hole=.66, marker=dict(colors=colors, line=dict(color="white", width=2)), texttemplate="%{percent:.2%}", textposition="inside", hovertemplate="%{label}<br>%{value:,.0f} respuestas · %{percent:.2%}<extra></extra>"))
         fig.update_layout(annotations=[dict(text=f"<b>{fmt(len(clean))}</b><br>respuestas", x=.5, y=.5, showarrow=False, font_size=18)], legend=dict(orientation="h", y=-.12, x=0))
         # Mantener la leyenda debajo del anillo, con etiquetas completas.
         fig.update_layout(template="plotly_white", height=height, margin=dict(l=8,r=8,t=10,b=80), font=dict(color="#36506B", size=11), paper_bgcolor="white")
@@ -160,7 +160,7 @@ def categorical(values, title, key, aliases=None, order=None, height=290, donut=
         st.caption(f"Base: {fmt(len(clean))} respuestas · {fmt(len(values) - len(clean))} sin dato.")
         return
     fig = px.bar(data, y="etiqueta", x="porcentaje", orientation="h", text="texto", custom_data=["n", "original"], color_discrete_sequence=[BLUE], labels={"etiqueta": "", "porcentaje": "% de respuestas"})
-    fig.update_traces(marker_color=colors, textposition="outside", cliponaxis=False, hovertemplate="%{customdata[1]}<br>%{customdata[0]} respuestas · %{x:.1f}%<extra></extra>")
+    fig.update_traces(marker_color=colors, textposition="outside", cliponaxis=False, hovertemplate="%{customdata[1]}<br>%{customdata[0]:,.0f} respuestas · %{x:,.2f}%<extra></extra>")
     fig.update_yaxes(autorange="reversed")
     fig.update_xaxes(range=[0, min(115, max(20, float(data.porcentaje.max()) * 1.38))])
     plot(fig, key, height)
@@ -182,7 +182,7 @@ def rates(items, title, key, height=310, kind="stacked"):
             shares = counts / total * 100
             texts = [f"{pct(p)}<br>{fmt(n)}" if p >= 8 else "" for p, n in zip(shares, counts)]
             custom = list(zip(counts, total, data["pct"]))
-            fig.add_trace(go.Bar(name=name, y=data.indicador, x=shares, orientation="h", marker_color=color, text=texts, textposition="inside", insidetextfont=dict(color="white" if name == "Sí" else "#234B7B", size=12), customdata=custom, hovertemplate=f"%{{y}}<br>{name}: %{{customdata[0]}} de %{{customdata[1]}} encuestas · %{{x:.1f}}%<br>Sí entre respuestas definidas: %{{customdata[2]:.1f}}%<extra></extra>"))
+            fig.add_trace(go.Bar(name=name, y=data.indicador, x=shares, orientation="h", marker_color=color, text=texts, textposition="inside", insidetextfont=dict(color="white" if name == "Sí" else "#234B7B", size=12), customdata=custom, hovertemplate=f"%{{y}}<br>{name}: %{{customdata[0]:,.0f}} de %{{customdata[1]:,.0f}} encuestas · %{{x:,.2f}}%<br>Sí entre respuestas definidas: %{{customdata[2]:,.2f}}%<extra></extra>"))
         fig.update_layout(barmode="stack", bargap=.3)
         fig.update_xaxes(title="% de las encuestas seleccionadas", range=[0,100], ticksuffix="%", dtick=25)
         plot(fig, key, height)
@@ -190,7 +190,7 @@ def rates(items, title, key, height=310, kind="stacked"):
         return
     data["texto"] = data.apply(lambda r: f"{pct(r['pct'])} · {fmt(r['n'])}", axis=1)
     fig = px.bar(data, x="pct", y="indicador", orientation="h", text="texto", custom_data=["n", "base", "missing"], color_discrete_sequence=[BLUE], labels={"pct": "% de respuestas definidas", "indicador": ""})
-    fig.update_traces(textposition="outside", cliponaxis=False, hovertemplate="%{y}<br>%{customdata[0]} de %{customdata[1]} · %{x:.1f}%<br>Sin respuesta definida: %{customdata[2]}<extra></extra>")
+    fig.update_traces(textposition="outside", cliponaxis=False, hovertemplate="%{y}<br>%{customdata[0]:,.0f} de %{customdata[1]:,.0f} · %{x:,.2f}%<br>Sin respuesta definida: %{customdata[2]:,.0f}<extra></extra>")
     fig.update_traces(marker_color=[RED if value in ("Descargas a personas", "Principio de incendio eléctrico") else BLUE for value in data.indicador])
     fig.update_xaxes(range=[0, max(15, float(data["pct"].max()) * 1.45)])
     plot(fig, key, height)
@@ -210,7 +210,7 @@ def age_pyramid(people):
         counts = data.loc[data.genero.eq(gender)].edad_grupo.value_counts().reindex(labels, fill_value=0)
         shares = counts / len(data) * 100
         peak = max(peak, float(shares.max()))
-        fig.add_trace(go.Bar(name=gender, y=labels, x=shares * sign, orientation="h", marker_color=color, customdata=list(zip(counts, shares)), text=[f"{fmt(n)}" if p >= 3 else "" for n,p in zip(counts,shares)], textposition="inside", hovertemplate="%{y}<br>%{customdata[0]} personas · %{customdata[1]:.1f}%<extra>%{fullData.name}</extra>"))
+        fig.add_trace(go.Bar(name=gender, y=labels, x=shares * sign, orientation="h", marker_color=color, customdata=list(zip(counts, shares)), text=[f"{fmt(n)}" if p >= 3 else "" for n,p in zip(counts,shares)], textposition="inside", hovertemplate="%{y}<br>%{customdata[0]:,.0f} personas · %{customdata[1]:,.2f}%<extra>%{fullData.name}</extra>"))
     extent = max(10, peak * 1.3)
     ticks = [-extent, -extent/2, 0, extent/2, extent]
     fig.update_layout(barmode="relative", bargap=.18)
@@ -229,7 +229,7 @@ def housing_cross(h):
     counts = pd.crosstab(data.vivienda_estado_general, data.filtraciones).reindex(index=["Bueno","Regular","Malo"], columns=[False,True], fill_value=0)
     shares = counts.div(counts.sum(axis=1).replace(0, float("nan")), axis=0) * 100
     xlabels = ["Sin filtraciones", "Con filtraciones"]
-    fig = go.Figure(go.Heatmap(z=shares.values, x=xlabels, y=counts.index, colorscale=[[0,"#EEF3F9"],[.5,"#91B2D6"],[1,BLUE]], zmin=0,zmax=100,colorbar=dict(title="% por fila",thickness=12), customdata=counts.values, hovertemplate="Estado %{y}<br>%{x}<br>%{customdata} encuestas · %{z:.1f}% del estado<extra></extra>"))
+    fig = go.Figure(go.Heatmap(z=shares.values, x=xlabels, y=counts.index, colorscale=[[0,"#EEF3F9"],[.5,"#91B2D6"],[1,BLUE]], zmin=0,zmax=100,colorbar=dict(title="% por fila",thickness=12), customdata=counts.values, hovertemplate="Estado %{y}<br>%{x}<br>%{customdata:,.0f} encuestas · %{z:,.2f}% del estado<extra></extra>"))
     for i, state in enumerate(counts.index):
         for j, label in enumerate(xlabels):
             value = shares.iloc[i,j]
@@ -276,7 +276,7 @@ def render_characterization(survey_data, records, fetched_at, csv_bytes):
     cards([
         ("Encuestas residenciales", fmt(len(h)), f"{h.barrio_encuesta.nunique()} barrios o sectores en la selección"),
         ("Personas declaradas", fmt(total_people), f"{fmt(adults)} mayores y {fmt(minors)} menores derivados de total menos mayores"),
-        ("Personas por vivienda", fmt(h.personas_cantidad.median(), 1), f"Mediana · base {fmt(h.personas_cantidad.notna().sum())} encuestas"),
+        ("Personas por vivienda", fmt(h.personas_cantidad.median(), 2), f"Mediana · base {fmt(h.personas_cantidad.notna().sum())} encuestas"),
         ("Familias declaradas", fmt(h.familias_cantidad.sum(min_count=1)), f"{fmt(h.familias_cantidad.gt(1).sum())} encuestas declaran más de una familia"),
     ])
     ground = binary_stats(h.puesta_tierra_hay, positive=False)
@@ -292,7 +292,7 @@ def render_characterization(survey_data, records, fetched_at, csv_bytes):
     st.markdown("#### Qué se encontró en el territorio")
     terrain = records.terreno_tipo.fillna("Sin dato").value_counts().rename_axis("tipo").rename("n").reset_index()
     fig = px.treemap(terrain, names="tipo", parents=[""] * len(terrain), values="n", color="tipo", color_discrete_sequence=[BLUE,YELLOW,LIGHT,"#D5A354","#A8B8CA","#657C9D","#B6C4D4"])
-    fig.update_traces(texttemplate="%{label}<br><b>%{value}</b> · %{percentRoot:.1%}", textfont_size=14, marker_line_color="white", marker_line_width=3, hovertemplate="%{label}<br>%{value} registros · %{percentRoot:.1%}<extra></extra>")
+    fig.update_traces(texttemplate="%{label}<br><b>%{value:,.0f}</b> · %{percentRoot:.2%}", textfont_size=14, marker_line_color="white", marker_line_width=3, hovertemplate="%{label}<br>%{value:,.0f} registros · %{percentRoot:.2%}<extra></extra>")
     fig.update_layout(showlegend=False)
     plot(fig,"survey_territory",270)
     st.caption(f"Los rectángulos representan los {fmt(len(records))} registros de campo seleccionados, no solo las viviendas que respondieron. El resto de la caracterización utiliza las {fmt(len(h))} encuestas residenciales completas.")
@@ -307,7 +307,7 @@ def render_characterization(survey_data, records, fetched_at, csv_bytes):
         sizes = data.groupby(["tamaño", "composición"], as_index=False).size().rename(columns={"size": "encuestas"})
         sizes["porcentaje"] = sizes.encuestas / len(data) * 100 if len(data) else 0
         fig = px.bar(sizes, x="tamaño", y="porcentaje", color="composición", barmode="stack", category_orders={"tamaño": ["1", "2", "3", "4", "5", "6", "7 o más"]}, color_discrete_map={"Con menores": YELLOW, "Sin menores": BLUE, "Sin dato de menores": GRAY}, labels={"tamaño": "Personas por vivienda", "porcentaje": "% de encuestas", "composición": ""}, custom_data=["encuestas"])
-        fig.update_traces(hovertemplate="%{x} personas<br>%{customdata[0]} encuestas · %{y:.1f}%<extra>%{fullData.name}</extra>")
+        fig.update_traces(hovertemplate="%{x:,.0f} personas<br>%{customdata[0]:,.0f} encuestas · %{y:,.2f}%<extra>%{fullData.name}</extra>")
         totals = sizes.groupby("tamaño").agg(n=("encuestas","sum"),p=("porcentaje","sum"))
         for label, value in totals.iterrows():
             fig.add_annotation(x=label, y=value.p, text=f"<b>{pct(value.p)}</b><br>{fmt(value.n)}", showarrow=False, yshift=18, font_size=10)
@@ -345,7 +345,7 @@ def render_characterization(survey_data, records, fetched_at, csv_bytes):
     density = binary_stats(h.hacinamiento_critico)
     collapse = binary_stats(h["vivienda_techo_interior_material/Riesgo_de_derrumbe"])
     cards([
-        ("Personas por ambiente", fmt(h.personas_por_ambiente.median(), 1), f"Mediana · base {fmt(h.personas_por_ambiente.notna().sum())} encuestas"),
+        ("Personas por ambiente", fmt(h.personas_por_ambiente.median(), 2), f"Mediana · base {fmt(h.personas_por_ambiente.notna().sum())} encuestas"),
         ("Hacinamiento crítico", pct(density["pct"]), f"{fmt(density['n'])} de {fmt(density['base'])} casos con datos · más de 3 personas por ambiente"),
         ("Riesgo de derrumbe señalado", pct(collapse["pct"]), f"Marcado en la pregunta de techo interior · {fmt(collapse['n'])} de {fmt(collapse['base'])} respuestas"),
     ], "survey-insights")
@@ -399,7 +399,7 @@ def render_characterization(survey_data, records, fetched_at, csv_bytes):
         count_distribution["porcentaje"] = count_distribution.n / len(complete_flags) * 100
         count_distribution["texto"] = count_distribution.apply(lambda r:f"{pct(r.porcentaje)}<br>{fmt(r.n)}",axis=1)
         fig = px.bar(count_distribution, x="cantidad", y="porcentaje", text="texto", custom_data=["n"], labels={"cantidad":"Cantidad de situaciones eléctricas declaradas", "porcentaje":"% de encuestas"})
-        fig.update_traces(marker_color=[BLUE,YELLOW,"#D8A240",RED,RED,RED,RED],textposition="outside",cliponaxis=False,hovertemplate="%{x} situaciones<br>%{customdata[0]} encuestas · %{y:.1f}%<extra></extra>")
+        fig.update_traces(marker_color=[BLUE,YELLOW,"#D8A240",RED,RED,RED,RED],textposition="outside",cliponaxis=False,hovertemplate="%{x:,.0f} situaciones<br>%{customdata[0]:,.0f} encuestas · %{y:,.2f}%<extra></extra>")
         fig.update_yaxes(range=[0,float(count_distribution.porcentaje.max())+13])
         fig.update_xaxes(dtick=1)
         plot(fig,"survey_problem_count",330)

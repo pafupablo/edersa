@@ -4,6 +4,46 @@ from plotly.subplots import make_subplots
 from model import label_period, general_consumption_trend
 
 
+def format_number(value, decimals=2):
+    if pd.isna(value):
+        return ""
+    return f"{value:,.{decimals}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def add_season_bands(fig, periods, *, annotation_y=1.025, annotation_yref="paper", row=None, col=None):
+    """Show winter and summer over consumed months, optionally on one subplot."""
+    dates = pd.DatetimeIndex(pd.to_datetime(pd.Series(periods), errors="coerce").dropna())
+    if dates.empty:
+        return fig
+    start = dates.min()
+    end = dates.max() + pd.DateOffset(months=2)
+    for year in range(start.year - 1, end.year + 1):
+        seasons = [
+            (pd.Timestamp(year, 6, 1), pd.Timestamp(year, 9, 1), "#FFFFFF", .9, "❄️"),
+            (pd.Timestamp(year, 12, 1), pd.Timestamp(year + 1, 3, 1), "#FFE16B", .45, "☀️"),
+        ]
+        for first, last, color, opacity, icon in seasons:
+            lower, upper = max(start, first), min(end, last)
+            if lower >= upper:
+                continue
+            rectangle = dict(x0=lower, x1=upper, fillcolor=color, opacity=opacity, line_width=0, layer="below")
+            if row is None:
+                fig.add_vrect(**rectangle)
+            else:
+                fig.add_vrect(**rectangle, row=row, col=col)
+            fig.add_annotation(
+                x=lower + (upper - lower) / 2,
+                y=annotation_y,
+                xref="x",
+                yref=annotation_yref,
+                text=icon,
+                showarrow=False,
+                font=dict(size=12),
+                opacity=.55,
+            )
+    return fig
+
+
 def trend_sparkline_svg(values):
     data = pd.to_numeric(pd.Series(values,dtype="float64"),errors="coerce").dropna().tolist()
     if len(data)<2:
@@ -21,11 +61,11 @@ def trend_sparkline_svg(values):
 
 def individual_history_chart(complete,history=None):
     labels = complete.periodo.map(label_period)
-    values = complete.consumo.map(lambda value: "" if pd.isna(value) else f"{value:,.0f}".replace(",","."))
-    fig = go.Figure(go.Scatter(x=complete.periodo,y=complete.consumo,name="Consumo registrado",mode="lines+markers+text",text=values,textposition="top center",textfont=dict(size=11,color="#234B7B"),line=dict(color="#30598F",width=3),marker=dict(size=7),connectgaps=False,cliponaxis=False,customdata=labels,hovertemplate="%{customdata}<br>Consumo registrado: %{y}<extra></extra>"))
+    values = complete.consumo.map(lambda value: format_number(value, 2))
+    fig = go.Figure(go.Scatter(x=complete.periodo,y=complete.consumo,name="Consumo registrado",mode="lines+markers+text",text=values,textposition="top center",textfont=dict(size=11,color="#234B7B"),line=dict(color="#30598F",width=3),marker=dict(size=7),connectgaps=False,cliponaxis=False,customdata=labels,hovertemplate="%{customdata}<br>Consumo registrado: %{y:,.2f}<extra></extra>"))
     trend = general_consumption_trend(complete if history is None else history,complete.periodo)
     if trend.notna().any():
-        fig.add_trace(go.Scatter(x=complete.periodo,y=trend,name="Tendencia general",mode="lines",line=dict(color="#6C7D91",width=2,dash="dash"),connectgaps=False,customdata=labels,hovertemplate="%{customdata}<br>Tendencia general: %{y:.1f}<extra></extra>"))
+        fig.add_trace(go.Scatter(x=complete.periodo,y=trend,name="Tendencia general",mode="lines",line=dict(color="#6C7D91",width=2,dash="dash"),connectgaps=False,customdata=labels,hovertemplate="%{customdata}<br>Tendencia general: %{y:,.2f}<extra></extra>"))
     if complete.consumo.lt(100).any():
         fig.add_hline(y=100,line_dash="dot",line_color="#C27B13",line_width=1.5,annotation_text="Umbral: 100 · mediciones inferiores excluidas",annotation_position="bottom left",annotation_font=dict(size=10,color="#94600C"))
         fig.data[0].marker.color = ["#C27B13" if pd.notna(value) and value < 100 else "#30598F" for value in complete.consumo]
@@ -35,18 +75,12 @@ def individual_history_chart(complete,history=None):
     if not complete.empty:
         start = complete.periodo.min()
         end = complete.periodo.max() + pd.DateOffset(months=2)
-        for year in range(start.year-1,end.year+1):
-            for first,last,color,icon in [(pd.Timestamp(year,6,1),pd.Timestamp(year,9,1),"#FFFFFF","❄️"),(pd.Timestamp(year,12,1),pd.Timestamp(year+1,3,1),"#FFE16B","☀️")]:
-                lower,upper = max(start,first),min(end,last)
-                if lower >= upper:
-                    continue
-                fig.add_vrect(x0=lower,x1=upper,fillcolor=color,opacity=.9 if icon=="❄️" else .45,line_width=0,layer="below")
-                fig.add_annotation(x=lower+(upper-lower)/2,y=1.025,yref="paper",text=icon,showarrow=False,font=dict(size=12),opacity=.4)
+        add_season_bands(fig, complete.periodo)
         fig.update_xaxes(range=[start-pd.Timedelta(days=12),end])
     ticks = complete.iloc[::max(1,(len(complete)+5)//6)]
     fig.update_xaxes(title="Período consumido",tickvals=ticks.periodo,ticktext=ticks.periodo.map(label_period).str.replace(" / ","<br>",regex=False),tickangle=0)
-    fig.update_yaxes(title="Consumo registrado",rangemode="tozero")
-    fig.update_layout(showlegend=True,legend=dict(orientation="h",x=0,y=1.16,yanchor="bottom"))
+    fig.update_yaxes(title="Consumo registrado",rangemode="tozero",tickformat=",.2f")
+    fig.update_layout(showlegend=True,legend=dict(orientation="h",x=0,y=1.16,yanchor="bottom"),separators=",.")
     return fig
 
 
@@ -58,12 +92,14 @@ def evolution_chart(summary):
     fig.add_trace(go.Scatter(x=summary.periodo,y=summary.p75,mode="lines",line=dict(width=0),fill="tonexty",fillcolor="rgba(48,89,143,.15)",name="Consumo · 50% central (P25–P75)",showlegend=False,hoverinfo="skip"),row=1,col=1)
     custom = list(zip(labels,summary.usuarios,summary.variacion_mediana_pct,summary.p25,summary.p75,summary.cobertura))
     for col,name,color,dash in [("mediana","Consumo · mediana","#30598F","solid"),("promedio","Consumo · media","#EBAE00","dash")]:
-        fig.add_trace(go.Scatter(x=summary.periodo,y=summary[col],name=name,mode="lines+markers",line=dict(color=color,width=3 if col=="mediana" else 2,dash=dash),customdata=custom,connectgaps=False,hovertemplate=f"%{{customdata[0]}}<br>{name}: %{{y:.1f}}<br>Variación de la mediana: %{{customdata[2]:.1f}}%<br>Usuarios con consumo ≥100: %{{customdata[1]}}<br>Cobertura: %{{customdata[5]:.1f}}%<br>P25: %{{customdata[3]:.1f}} · P75: %{{customdata[4]:.1f}}<extra></extra>"),row=1,col=1)
-    fig.add_trace(go.Bar(x=summary.periodo,y=summary.usuarios,name="Usuarios · cantidad",marker_color="#91B2D6",customdata=custom,hovertemplate="%{customdata[0]}<br>Usuarios incluidos (consumo ≥100): %{y}<br>Cobertura: %{customdata[5]:.1f}%<extra></extra>"),row=2,col=1)
+        fig.add_trace(go.Scatter(x=summary.periodo,y=summary[col],name=name,mode="lines+markers",line=dict(color=color,width=3 if col=="mediana" else 2,dash=dash),customdata=custom,connectgaps=False,hovertemplate=f"%{{customdata[0]}}<br>{name}: %{{y:,.2f}}<br>Variación de la mediana: %{{customdata[2]:,.2f}}%<br>Usuarios con consumo ≥100: %{{customdata[1]:,.0f}}<br>Cobertura: %{{customdata[5]:,.2f}}%<br>P25: %{{customdata[3]:,.2f}} · P75: %{{customdata[4]:,.2f}}<extra></extra>"),row=1,col=1)
+    user_labels = summary.usuarios.map(lambda value: format_number(value, 0))
+    fig.add_trace(go.Bar(x=summary.periodo,y=summary.usuarios,name="Usuarios · cantidad",marker_color="#91B2D6",text=user_labels,textposition="outside",cliponaxis=False,customdata=custom,hovertemplate="%{customdata[0]}<br>Usuarios incluidos (consumo ≥100): %{y:,.0f}<br>Cobertura: %{customdata[5]:,.2f}%<extra></extra>"),row=2,col=1)
+    add_season_bands(fig, summary.periodo, annotation_y=1.025, annotation_yref="y domain", row=1, col=1)
     ticks = summary.iloc[::max(1,(len(summary)+5)//6)]
     fig.update_xaxes(showticklabels=True,tickvals=ticks.periodo,ticktext=ticks.periodo.map(label_period).str.replace(" / ","<br>",regex=False),tickangle=0,row=1,col=1)
     fig.update_xaxes(title="Período consumido",tickvals=ticks.periodo,ticktext=ticks.periodo.map(label_period),tickangle=-30,row=2,col=1)
-    fig.update_yaxes(title="Consumo bimestral · fuente",row=1,col=1)
-    fig.update_yaxes(title="Cantidad de usuarios",rangemode="tozero",row=2,col=1)
-    fig.update_layout(legend=dict(orientation="h", y=1.22, x=0), hovermode="x unified")
+    fig.update_yaxes(title="Consumo bimestral · fuente",tickformat=",.2f",row=1,col=1)
+    fig.update_yaxes(title="Cantidad de usuarios",rangemode="tozero",tickformat=",.0f",row=2,col=1)
+    fig.update_layout(legend=dict(orientation="h", y=1.22, x=0), hovermode="x unified",separators=",.")
     return fig

@@ -68,7 +68,7 @@ def median_style(value):
 
 
 def chart(fig, key=None, height=320, top_margin=15, plot_background="rgba(0,0,0,0)"):
-    fig.update_layout(template="plotly_white", height=height, margin=dict(l=12, r=12, t=top_margin, b=15), font=dict(family="Arial", color="#36506B"), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=plot_background, colorway=COLORS, legend_title_text="")
+    fig.update_layout(template="plotly_white", height=height, margin=dict(l=12, r=12, t=top_margin, b=15), font=dict(family="Arial", color="#36506B"), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=plot_background, colorway=COLORS, legend_title_text="", separators=",.")
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(gridcolor="#E6EDF2")
     st.plotly_chart(fig, width="stretch", key=key, config={"displaylogo": False})
@@ -265,7 +265,7 @@ def distribution(df, column, title, key, top=12):
         return
     visible = table.head(top).sort_values("Usuarios")
     fig = px.bar(visible, y=column, x="Usuarios", orientation="h", color_discrete_sequence=COLORS, labels={column: ""}, text="Usuarios")
-    fig.update_traces(textposition="outside", cliponaxis=False)
+    fig.update_traces(textposition="outside", texttemplate="%{x:,.0f}", cliponaxis=False)
     chart(fig, key)
     if len(table) > top:
         st.caption(f"Se muestran las {top} categorías con más usuarios de {len(table)}.")
@@ -277,15 +277,16 @@ if section == "Panorama":
     a.metric("Usuarios seleccionados", fmt(len(filtered)))
     b.metric("Barrios vinculados", fmt(filtered.loc[filtered.barrio_vinculado, "renabap"].nunique()))
     d.metric("Usuarios con consumo ≥100", fmt(latest_c.usuario_id.nunique()), help=f"Período consumido: {label_period(latest)}.")
-    e.metric("Consumo mediano · último período", fmt(latest_c.consumo.median(), 1), help="Mediana entre usuarios con consumo ≥100; se excluyen faltantes y valores menores a 100.")
-    st.caption(f"Período consumido: {label_period(latest)} · Cobertura estadística: {fmt(100 * latest_c.usuario_id.nunique() / len(filtered), 1)}% · Mediciones de consumo menores a 100 excluidas: {fmt(latest_raw.consumo.lt(100).sum())}.")
+    e.metric("Consumo mediano · último período", fmt(latest_c.consumo.median(), 2), help="Mediana entre usuarios con consumo ≥100; se excluyen faltantes y valores menores a 100.")
+    st.caption(f"Período consumido: {label_period(latest)} · Cobertura estadística: {fmt(100 * latest_c.usuario_id.nunique() / len(filtered), 2)}% · Mediciones de consumo menores a 100 excluidas: {fmt(latest_raw.consumo.lt(100).sum())}.")
     st.caption(f"En la selección: {fmt(filtered.intervenciones_registros.gt(0).sum())} usuarios con registros de soluciones vinculados y {fmt(filtered.intervenciones_ejecutadas.gt(0).sum())} con ejecución marcada ‘sí’ en alguna fecha. Sin registro no equivale a ausencia de intervención.")
     st.markdown("#### Evolución del consumo · mediana y media")
     if selected_c.empty:
         st.info("No hay consumos ≥100 para la selección y la ventana elegida.")
     else:
-        chart(evolution_chart(summary), "evolution", height=680, top_margin=105)
+        chart(evolution_chart(summary), "evolution", height=680, top_margin=105, plot_background="#EEF3F8")
         st.caption("Arriba: mediana, media y 50% central del consumo bimestral, en la unidad de la fuente. Abajo: cantidad de usuarios (Usua_ID únicos) con consumo ≥100. Son ejes y magnitudes diferentes.")
+        st.caption("❄️ Banda blanca: invierno (junio–agosto). ☀️ Banda amarilla: verano (diciembre–febrero). Las bandas siguen los meses consumidos; cada punto corresponde a un bimestre.")
         st.caption("El cursor informa la variación porcentual de la mediana respecto al período anterior y la cobertura de usuarios. La banda P25–P75 describe dispersión, no un intervalo de confianza.")
         st.caption("La cantidad de usuarios incluidos cambia por período. La evolución no representa necesariamente un grupo fijo de usuarios.")
     evolution_columns = {"periodo":"Período consumido", "mediana":"Consumo · mediana", "promedio":"Consumo · media", "p25":"Consumo · P25", "p75":"Consumo · P75", "total":"Consumo · total de valores ≥100", "usuarios_padron":"Usuarios · padrón seleccionado", "usuarios_observados":"Usuarios · con registro en período", "usuarios":"Usuarios · incluidos (consumo ≥100)", "menores_100":"Usuarios · excluidos por consumo <100", "sin_registro_periodo":"Usuarios · sin registro en período", "cobertura":"Usuarios · cobertura estadística %", "variacion_mediana_pct":"Consumo · variación de mediana %"}
@@ -297,7 +298,14 @@ if section == "Panorama":
     with right:
         distribution(filtered, "tipo_pase", "Tipo PASE del barrio", "pase_type")
     with st.expander("Ver cifras de la evolución"):
-        st.dataframe(evolution_export, hide_index=True, width="stretch")
+        evolution_display = evolution_export.copy()
+        decimal_columns = ["Consumo · mediana", "Consumo · media", "Consumo · P25", "Consumo · P75", "Consumo · total de valores ≥100", "Usuarios · cobertura estadística %", "Consumo · variación de mediana %"]
+        integer_columns = ["Usuarios · padrón seleccionado", "Usuarios · con registro en período", "Usuarios · incluidos (consumo ≥100)", "Usuarios · excluidos por consumo <100", "Usuarios · sin registro en período"]
+        for column in decimal_columns:
+            evolution_display[column] = evolution_display[column].map(lambda value: fmt(value, 2))
+        for column in integer_columns:
+            evolution_display[column] = evolution_display[column].map(lambda value: fmt(value, 0))
+        st.dataframe(evolution_display, hide_index=True, width="stretch")
 
 elif section == "Usuarios y fichas":
     metrics = latest_raw[["usuario_id", "consumo"]].rename(columns={"consumo": "consumo_ultimo"})
@@ -316,10 +324,10 @@ elif section == "Usuarios y fichas":
     st.caption("Mediana: consumos ≥100 en la ventana seleccionada. Rojo: >1000; amarillo: 800–1000. Cantidad: todos los registros de consumo de esa ventana, incluidos los menores a 100. Consumo crítico: mediana o último valor >1000. Las soluciones y ejecuciones muestran sus etiquetas; pasá el cursor sobre una celda para leer el texto completo.")
     compact_listing = listing.copy()
     compact_listing.columns = pd.MultiIndex.from_tuples([("Usuario","ID"),("Usuario","NIS"),("Mediana","consumo"),("Mediciones","de consumo"),("Consumo","crítico"),("Ubicación","Barrio"),("Ubicación","Localidad"),("Tipo","PASE"),("Programa","300 / No 300"),("Soluciones","registradas"),("Intervenciones","ejecutadas")])
-    styled_listing = compact_listing.style.map(median_style, subset=[("Mediana","consumo")]).map(lambda value:"background-color:#FDE2E2;color:#9F1239;font-weight:bold" if value != "—" else "",subset=[("Consumo","crítico")]).format({("Mediana","consumo"): "{:.1f}",("Mediciones","de consumo"):"{:d}"}, na_rep="—")
+    styled_listing = compact_listing.style.map(median_style, subset=[("Mediana","consumo")]).map(lambda value:"background-color:#FDE2E2;color:#9F1239;font-weight:bold" if value != "—" else "",subset=[("Consumo","crítico")]).format({("Mediana","consumo"): lambda value: fmt(value, 2), ("Mediciones","de consumo"): lambda value: fmt(value, 0)}, na_rep="—")
     # Posiciones Arrow: el índice oculto ocupa la posición cero.
     configs = {i:st.column_config.Column(width=width) for i,width in enumerate([125,90,75,75,80,140,115,75,85,155,155],start=1)}
-    configs[3] = st.column_config.NumberColumn(width=75,help="Mediana de los consumos ≥100 del usuario dentro de la ventana seleccionada.",format="%.1f")
+    configs[3] = st.column_config.NumberColumn(width=75,help="Mediana de los consumos ≥100 del usuario dentro de la ventana seleccionada.",format="%.2f")
     configs[4] = st.column_config.NumberColumn(width=75,help="Cantidad de registros de consumo en la ventana seleccionada, incluidos los menores a 100.",format="%d")
     configs[5] = st.column_config.TextColumn(width=100,help="Indica si la mediana, el último consumo o ambos superan 1000. Exactamente 1000 no se considera crítico.")
     event = st.dataframe(styled_listing, hide_index=True, width="stretch", height=350, row_height=30, on_select="rerun", selection_mode="single-row", column_config=configs, key="user_table_" + str(pd.util.hash_pandas_object(listing[["Usua_ID"]]).sum()))
@@ -339,13 +347,13 @@ elif section == "Usuarios y fichas":
     with median_card:
         with st.container(key="individual_median_kpi"):
             sparkline = trend_sparkline_svg(trend_values)
-            st.markdown('<div style="background:white;border:1px solid #E1E8EF;padding:18px;border-radius:12px;min-height:108px;box-sizing:border-box" title="Mediana de consumos ≥100 en la ventana seleccionada. Tendencia de todo el historial: verde si sube, roja si baja; más intensa según la variación."><div style="color:#5B6E80;font-size:.82rem;margin-bottom:4px">Consumo mediano</div><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:1.9rem;font-weight:600;white-space:nowrap">'+fmt(row.mediana_usuario,1)+'</span><div style="flex:0 0 38%;max-width:110px;height:44px">'+sparkline+'</div></div></div>',unsafe_allow_html=True)
+            st.markdown('<div style="background:white;border:1px solid #E1E8EF;padding:18px;border-radius:12px;min-height:108px;box-sizing:border-box" title="Mediana de consumos ≥100 en la ventana seleccionada. Tendencia de todo el historial: verde si sube, roja si baja; más intensa según la variación."><div style="color:#5B6E80;font-size:.82rem;margin-bottom:4px">Consumo mediano</div><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:1.9rem;font-weight:600;white-space:nowrap">'+fmt(row.mediana_usuario,2)+'</span><div style="flex:0 0 38%;max-width:110px;height:44px">'+sparkline+'</div></div></div>',unsafe_allow_html=True)
             if critical:
                 reasons = []
                 if pd.notna(row.mediana_usuario) and row.mediana_usuario > 1000:
-                    reasons.append(f"mediana {fmt(row.mediana_usuario,1)}")
+                    reasons.append(f"mediana {fmt(row.mediana_usuario,2)}")
                 if pd.notna(row.consumo_ultimo) and row.consumo_ultimo > 1000:
-                    reasons.append(f"último {fmt(row.consumo_ultimo,1)} ({label_period(latest)})")
+                    reasons.append(f"último {fmt(row.consumo_ultimo,2)} ({label_period(latest)})")
                 st.markdown('<div style="background:#FDE2E2;color:#9F1239;border-radius:8px;padding:7px 10px;font-size:.8rem"><b>Consumo crítico</b> · '+html.escape(" · ".join(reasons))+'</div>',unsafe_allow_html=True)
     e.metric("Mediciones de consumo", fmt(raw_selected_c.usuario_id.eq(selected_id).sum()))
 
@@ -369,7 +377,9 @@ elif section == "Usuarios y fichas":
             st.caption("La línea punteada muestra la tendencia lineal general, calculada con todo el historial del usuario y consumos ≥100. Se dibuja solo entre registros válidos, sin proyectar a futuro. No es un ajuste por estacionalidad. Con menos de dos registros aptos no se calcula.")
             st.caption("❄️ Banda blanca: invierno (junio–agosto). ☀️ Banda amarilla: verano (diciembre–febrero). Las bandas siguen los meses consumidos; cada punto corresponde a un bimestre.")
             complete["criterio"] = complete.consumo.map(lambda v: "Sin dato" if pd.isna(v) else "Excluido de estadísticas (<100)" if v < 100 else "Incluido en estadísticas")
-            st.dataframe(complete.assign(periodo=complete.periodo.map(label_period)).rename(columns={"periodo": "Período consumido", "consumo": "Consumo", "criterio": "Uso estadístico"}), hide_index=True, width="stretch")
+            history_display = complete.assign(periodo=complete.periodo.map(label_period)).rename(columns={"periodo": "Período consumido", "consumo": "Consumo", "criterio": "Uso estadístico"})
+            history_display["Consumo"] = history_display["Consumo"].map(lambda value: fmt(value, 2))
+            st.dataframe(history_display, hide_index=True, width="stretch")
     st.markdown("#### Soluciones e intervenciones vinculadas")
     user_events = interventions.loc[interventions.usuario_id.eq(selected_id)].copy()
     if user_events.empty:
@@ -408,7 +418,7 @@ elif section == "Comparar grupos":
         metric = st.radio("Estadístico de la evolución", ["Mediana", "Media"], horizontal=True, key="compare_metric")
         metric_col = "mediana" if metric == "Mediana" else "media"
         fig = px.line(stats, x="periodo", y=metric_col, color="grupo", markers=True, color_discrete_map=color_map, custom_data=["con_dato", "cobertura"], labels={"periodo": "Período consumido", metric_col: f"Consumo · {metric.lower()}", "grupo": chosen})
-        fig.update_traces(connectgaps=False, hovertemplate="%{y:.1f}<br>Usuarios ≥100: %{customdata[0]}<br>Cobertura: %{customdata[1]:.1f}%<extra>%{fullData.name}</extra>")
+        fig.update_traces(connectgaps=False, hovertemplate="%{y:,.2f}<br>Usuarios ≥100: %{customdata[0]:,.0f}<br>Cobertura: %{customdata[1]:,.2f}%<extra>%{fullData.name}</extra>")
         ticks = periods[::max(1, (len(periods) + 5) // 6)]
         fig.update_xaxes(tickvals=ticks, ticktext=[label_period(p) for p in ticks], tickangle=-35)
         fig.update_layout(legend=dict(orientation="h", y=1.12, x=0))
@@ -438,10 +448,15 @@ elif section == "Comparar grupos":
         renames = {"grupo": chosen, "periodo": "Período consumido", "usuarios": "Usuarios del grupo", "con_dato": "Usuarios ≥100", "mediana": "Mediana", "media": "Media", "p25": "P25", "p75": "P75", "desvio": "Desvío estándar", "cobertura": "Cobertura %", "diferencia": "Diferencia de mediana", "diferencia_pct": "Diferencia %", "mediana_referencia": "Mediana de referencia"}
         shown = stats.assign(periodo=stats.periodo.map(label_period)).rename(columns=renames)
         st.markdown(f"#### Diferencias entre grupos · {label_period(chosen_period)}")
-        numeric_config = {name: st.column_config.NumberColumn(name, format="%.1f") for name in ["Mediana", "Media", "P25", "P75", "Desvío estándar", "Cobertura %", "Diferencia de mediana", "Diferencia %", "Mediana de referencia"]}
-        st.dataframe(shown.loc[stats.periodo.eq(chosen_period)], hide_index=True, width="stretch", column_config=numeric_config)
+        numeric_columns = ["Mediana", "Media", "P25", "P75", "Desvío estándar", "Cobertura %", "Diferencia de mediana", "Diferencia %", "Mediana de referencia"]
+        shown_display = shown.copy()
+        for column in numeric_columns:
+            shown_display[column] = shown_display[column].map(lambda value: fmt(value, 2))
+        for column in ["Usuarios del grupo", "Usuarios ≥100"]:
+            shown_display[column] = shown_display[column].map(lambda value: fmt(value, 0))
+        st.dataframe(shown_display.loc[stats.periodo.eq(chosen_period)], hide_index=True, width="stretch")
         with st.expander("Ver comparación en todos los períodos"):
-            st.dataframe(shown, hide_index=True, width="stretch", column_config=numeric_config)
+            st.dataframe(shown_display, hide_index=True, width="stretch")
         st.download_button("Descargar comparación por grupo y período · CSV", csv_bytes(shown), "edersa_comparacion.csv", "text/csv")
     st.info("Comparación descriptiva. El grupo de intervenciones indica ejecución registrada en cualquier fecha, no necesariamente anterior al período consumido. No estima efecto causal; sin ejecución registrada no significa ausencia confirmada de intervención.")
 
