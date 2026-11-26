@@ -56,7 +56,18 @@ def load_sheets(service_account):
             continue
         worksheet = client.open_by_key(source["id"]).worksheet(source["worksheet"])
         # FORMATTED_VALUE preserva oct-24: el serial subyacente no representa el año mostrado.
-        values = worksheet.get(source["range"], value_render_option=source.get("value_render_option", "FORMATTED_VALUE"))
+        render = source.get("value_render_option", "FORMATTED_VALUE")
+        if source.get("ranges"):
+            parts = worksheet.batch_get(source["ranges"], value_render_option=render)
+            row_count = max((len(part) for part in parts), default=0)
+            values = []
+            for row_index in range(row_count):
+                row = []
+                for part in parts:
+                    row.extend(part[row_index] if row_index < len(part) else [])
+                values.append(row)
+        else:
+            values = worksheet.get(source["range"], value_render_option=render)
         if source.get("columns") and values:
             indexes = [values[0].index(name) for name in source["columns"] if name in values[0]]
             values = [[row[i] if i < len(row) else None for i in indexes] for row in values]
