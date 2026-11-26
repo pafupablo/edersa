@@ -223,7 +223,8 @@ def build_dataset(raw):
     frames = {key: frame(raw[key], key) for key in HEADERS}
     u, c, g, b = [frames[k].copy() for k in ("usuarios", "consumo", "gps", "barrios")]
     altas = frames["usuarios_alta"].copy()
-    counts = {k: len(v) for k, v in frames.items()}
+    counts = {key: max(len(rows) - 1, 0) for key, rows in raw.items()}
+    counts.update({key: len(values) for key, values in frames.items()})
     for df in (u, c, g):
         df["Usua_ID"] = df["Usua_ID"].map(identifier)
     for df in (u, g):
@@ -327,9 +328,18 @@ def build_dataset(raw):
         {"Control": "Filas sin solución especificada", "Cantidad": len(incomplete), "Criterio": "Se conservan para revisar; no se contabilizan como intervenciones."},
         {"Control": "Registros de intervención duplicados exactos", "Cantidad": int(events.duplicado_exacto.sum()), "Criterio": "Se conservan para auditar; no se cuentan dos veces en el usuario."},
     ])], ignore_index=True)
-    surveys = build_surveys(raw.get("encuestas", []), raw.get("personas", []), u, b)
+    surveys = build_surveys(raw.get("encuestas", []), raw.get("personas", []), u, b, raw.get("usuarios_documentos", []))
     counts["encuestas"] = len(surveys.records)
     counts["personas"] = len(surveys.people)
+    residential_surveys = surveys.records.loc[surveys.records.residencial]
+    linked_surveys = residential_surveys.usuario_id.ne("")
+    quality = pd.concat([quality, pd.DataFrame([
+        {"Control": "Encuestas residenciales vinculadas al padrón", "Cantidad": int(linked_surveys.sum()), "Criterio": "Coincidencia única y consistente por NIS, DNI o ambos; se rechazan diferencias de barrio conocidas."},
+        {"Control": "Encuestas vinculadas con confirmación por DNI", "Cantidad": int((linked_surveys & residential_surveys.vinculo_encuesta.isin(["DNI confirmado", "NIS y DNI confirmados"])).sum()), "Criterio": "El DNI se usa transitoriamente para resolver Usua_ID y luego se descarta."},
+        {"Control": "Encuestas con identificadores ambiguos o en conflicto", "Cantidad": int(residential_surveys.vinculo_encuesta.isin(["NIS ambiguo", "DNI ambiguo", "Identificadores ambiguos", "NIS y DNI en conflicto"]).sum()), "Criterio": "No se asignan al usuario hasta resolver la ambigüedad o contradicción."},
+        {"Control": "Encuestas rechazadas por barrio diferente", "Cantidad": int(residential_surveys.vinculo_encuesta.eq("Barrio diferente; revisar").sum()), "Criterio": "Aunque coincida un identificador, no se vincula si ambos RENABAP conocidos son distintos."},
+    ])], ignore_index=True)
+    issues.update(surveys.issues)
     survey_links = surveys.records.loc[surveys.records.residencial & surveys.records.usuario_id.ne("")].groupby("usuario_id").size()
     u["encuestas_vinculadas"] = u.usuario_id.map(survey_links).fillna(0).astype(int)
     return Dataset(u, c, b, quality, issues, counts, events, incomplete, surveys)

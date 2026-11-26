@@ -46,7 +46,7 @@ La publicación y la conexión en vivo requieren completar los pasos de cuenta y
 
 ## Caracterización de hogares
 
-Fuente: [Formulario EdERSA de producción](https://docs.google.com/spreadsheets/d/15ErlZXsZgrmHpKdeWLPDsgcI9A5AhqBjrUCFWmgAm5Q/edit). Se leen Relevamiento Producción y grupo_personas. La selección de columnas para la aplicación excluye nombres, DNI, teléfonos, correos, fotografías, información de deuda e ingresos. El código admite columnas nuevas sin importar automáticamente campos personales.
+Fuente: [Formulario EdERSA de producción](https://docs.google.com/spreadsheets/d/15ErlZXsZgrmHpKdeWLPDsgcI9A5AhqBjrUCFWmgAm5Q/edit). Se leen Relevamiento Producción y grupo_personas. Los DNI se leen transitoriamente solo para resolver el vínculo con Usua_ID, se normalizan en memoria y se eliminan antes de construir pantallas, descargas y controles. La selección excluye nombres, teléfonos, correos, fotografías, información de deuda e ingresos. El código admite columnas nuevas sin importar automáticamente campos personales.
 
 La sección tiene filtros propios por departamento, localidad, barrio y Tipo PASE, con manzana/lote y vínculo al padrón como opciones adicionales. Incluye hogares sin NIS para conservar la cobertura territorial. Se distinguen registros de campo, encuestas completas y encuestas residenciales de vivienda ocupada. La revisión del 17/11/2026 contiene 1.465 registros, 1.024 completas y 1.020 residenciales, con 3.258 personas declaradas.
 

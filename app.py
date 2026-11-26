@@ -131,7 +131,7 @@ if mode == "Copia de prueba":
 
 try:
     with st.spinner("Relacionando usuarios, barrios y consumos…"):
-        dataset, fetched_at = cached_load(mode, "user-tenure-v1", local_altas)
+        dataset, fetched_at = cached_load(mode, "survey-dni-link-v1", local_altas)
 except DataError as exc:
     source_controls(options, mode)
     st.error(str(exc))
@@ -188,11 +188,11 @@ with st.sidebar:
         with st.expander("Ubicación y vínculo al padrón"):
             survey_filter("Manzana", "manzana")
             survey_filter("Lote", "lote")
-            scope = st.selectbox("Universo de lectura", ["Todas las encuestas", "Solo NIS confirmado en el padrón"], key="survey_filter_scope")
+            scope = st.selectbox("Universo de lectura", ["Todas las encuestas", "Solo vínculo confirmado con el padrón"], key="survey_filter_scope")
             if scope != "Todas las encuestas":
                 survey_selected = survey_selected.loc[survey_selected.usuario_id.ne("")]
         st.caption(f"{fmt(survey_selected.residencial.sum())} encuestas residenciales completas")
-        st.caption("Esta sección utiliza filtros de encuestas y conserva los hogares sin NIS vinculado.")
+        st.caption("Esta sección utiliza filtros de encuestas y conserva los hogares sin vínculo confirmado al padrón.")
     elif section == "Barrios":
         neighborhoods_selected = dataset.neighborhoods.copy()
         neighborhoods_selected["etiqueta_barrio"] = neighborhoods_selected.barrio + " · " + neighborhoods_selected.localidad + " · " + neighborhoods_selected.renabap
@@ -437,11 +437,11 @@ elif section == "Usuarios y fichas":
     st.markdown("#### Encuesta residencial vinculada")
     household_surveys = dataset.surveys.records.loc[dataset.surveys.records.residencial & dataset.surveys.records.usuario_id.eq(selected_id)].sort_values("fecha_encuesta", ascending=False)
     if household_surveys.empty:
-        st.caption("Sin encuesta residencial con NIS confirmado para este usuario. La caracterización territorial completa está disponible en Caracterización de hogares.")
+        st.caption("Sin encuesta residencial con NIS o DNI confirmado para este usuario. La caracterización territorial completa está disponible en Caracterización de hogares.")
     else:
         survey_row = household_surveys.iloc[0]
         render_linked_household(survey_row)
-        st.caption(f"{len(household_surveys)} encuestas asociadas por NIS. Se muestra la más reciente; el suministro puede corresponder a más de una vivienda.")
+        st.caption(f"{len(household_surveys)} encuestas asociadas por NIS o DNI. Se muestra la más reciente; el suministro puede corresponder a más de una vivienda.")
 
 elif section == "Comparar grupos":
     group_options = {"Tipo PASE del barrio": "tipo_pase", "PASE del barrio": "pase_barrio", "Ejecución de intervenciones · cualquier fecha": "intervencion_grupo", "Programa · 300 / No 300": "programa_grupo", "Registro de gas": "gas", "Localidad": "localidad", "Barrio": "barrio_etiqueta", "Categoría · código": "categoria"}
@@ -541,7 +541,7 @@ elif section == "Intervenciones":
 else:
     st.markdown("#### Fuentes conectadas")
     st.caption("Los controles de esta sección corresponden al universo completo, independientemente de los filtros laterales.")
-    source_table = pd.DataFrame([{"Fuente": s["title"], "Pestaña": s["worksheet"], "Filas": dataset.raw_counts[key], "Archivo": f"https://docs.google.com/spreadsheets/d/{s['id']}/edit"} for key, s in SOURCES.items()])
+    source_table = pd.DataFrame([{"Fuente": s["title"], "Pestaña": s["worksheet"], "Filas": dataset.raw_counts[key], "Archivo": None if s.get("private") else f"https://docs.google.com/spreadsheets/d/{s['id']}/edit"} for key, s in SOURCES.items()])
     st.dataframe(source_table, hide_index=True, width="stretch", column_config={"Archivo": st.column_config.LinkColumn("Abrir fuente", display_text="Abrir archivo")})
     st.markdown("#### Controles de vinculación y cobertura")
     st.dataframe(dataset.quality, hide_index=True, width="stretch")
@@ -552,7 +552,7 @@ else:
     st.markdown("#### Criterios de lectura")
     st.markdown("""
     - **Universo:** Usuarios general; una fila por Usua_ID. GPS no agrega nuevos usuarios.
-    - **Vínculos:** Usua_ID une usuarios, GPS y consumos; RENABAP une usuarios y barrios. No se cruza por nombres ni por NIS.
+    - **Vínculos:** Usua_ID une usuarios, GPS y consumos; RENABAP une usuarios y barrios. No se cruza por nombres.
     - **Períodos consumidos:** se toman los dos meses anteriores al mes facturado. feb-26 corresponde a dic-25 / ene-26. Se conserva el rótulo original en la base.
     - **Gas:** vacío significa sin información, no confirma acceso a gas.
     - **Programa:** se agrupa en 300 / No 300; un valor faltante permanece como sin información. Categoría conserva su código original.
@@ -562,7 +562,7 @@ else:
     - **Dispersión:** P25–P75 contiene el 50% central; el desvío estándar es muestral y queda sin calcular cuando hay menos de dos mediciones de consumo.
     - **Intervenciones:** se lee únicamente A:L de CARGAR SOLUCIONES ACÁ del Excel de soluciones. Se conservan propuestas, ejecución, negativas y registros sin confirmar. Solo los vínculos confirmados se asignan al usuario.
     - **Cruces de soluciones:** NIS exacto, Persona/Cuenta y corroboración con barrio. Conflictos y vínculos probables quedan pendientes. Nunca se identifica a un hogar solo por barrio.
-    - **Encuestas:** la caracterización incluye todas las encuestas residenciales completas seleccionadas, también las que no tienen vínculo confirmado con el padrón. Sus filtros territoriales son independientes de los filtros de usuarios.
+    - **Encuestas:** la caracterización incluye todas las encuestas residenciales completas seleccionadas, también las que no tienen vínculo confirmado con el padrón. El vínculo se confirma por NIS o por un DNI único asociado al Usua_ID; identificadores contradictorios, documentos compartidos y barrios diferentes quedan sin asignar. Los DNI no se muestran ni se exportan. Sus filtros territoriales son independientes de los filtros de usuarios.
     """)
     if mode == "Copia de prueba":
         st.info("Esta vista usa una copia de revisión. Para recibir cambios de las fuentes, configurá la cuenta de servicio y seleccioná ‘Google Sheets + Drive’. No cambia automáticamente al modo online.")
