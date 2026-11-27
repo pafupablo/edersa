@@ -71,6 +71,34 @@ class SurveyIdentityLinkTests(unittest.TestCase):
         self.assertNotIn("encuestado_dni", result.people.columns)
         self.assertFalse(any("30123456" in str(value) for value in result.records.to_numpy().ravel()))
 
+    def test_applies_precomputed_link_without_loading_documents(self):
+        surveys = survey_rows(
+            [{"_uuid": "one", "encuesta_responde": "Sí", "terreno_tipo": "Vivienda ocupada"}]
+        )
+        links = [
+            ["survey_uuid", "usuario_id", "vinculo_encuesta"],
+            ["one", "u2", "DNI confirmado"],
+        ]
+
+        result = build_surveys(surveys, [], self.users, self.neighborhoods, links_raw=links)
+        record = result.records.iloc[0]
+
+        self.assertEqual(record.usuario_id, "u2")
+        self.assertEqual(record.vinculo_encuesta, "DNI confirmado")
+        self.assertNotIn("dni", " ".join(result.records.columns).lower())
+
+    def test_rejects_precomputed_link_to_unknown_user(self):
+        surveys = survey_rows(
+            [{"_uuid": "one", "encuesta_responde": "Sí", "terreno_tipo": "Vivienda ocupada"}]
+        )
+        links = [
+            ["survey_uuid", "usuario_id", "vinculo_encuesta"],
+            ["one", "unknown", "DNI confirmado"],
+        ]
+
+        with self.assertRaisesRegex(ValueError, "no existen en el padrón"):
+            build_surveys(surveys, [], self.users, self.neighborhoods, links_raw=links)
+
     def test_normalizes_argentine_document_numbers(self):
         self.assertEqual(document_id("30.123.456"), "30123456")
         self.assertEqual(document_id("001234567"), "1234567")

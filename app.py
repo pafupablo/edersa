@@ -8,7 +8,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from data_access import ROOT, SOURCES, load_local, load_sheets, local_available
+from data_access import ROOT, SOURCES, load_local, local_available
 from model import DataError, UNKNOWN, USER_TENURE_ORDER, build_dataset, evolution_statistics, group_statistics, label_period, general_consumption_trend, critical_consumption, format_tenure, user_tenure_snapshot
 from sidebar_filters import filter_household_survey_status, pase_filter_label
 from charts import evolution_chart, individual_history_chart, trend_sparkline_svg
@@ -17,7 +17,7 @@ from neighborhoods import render_neighborhoods
 
 st.set_page_config(page_title="EdERSA · Explorador", page_icon="◉", layout="wide")
 
-st.info("Versión de prueba · datos al 17/11/2026 · no se actualizan automáticamente desde Sheets.")
+st.info("Versión de prueba · datos principales al 17/11/2026 · vínculos de encuestas actualizados sin publicar DNI.")
 
 st.markdown("""<style>
 .block-container{padding-top:3.5rem;padding-bottom:3rem;max-width:1550px}
@@ -77,24 +77,14 @@ def chart(fig, key=None, height=320, top_margin=15, plot_background="rgba(0,0,0,
 
 @st.cache_data(ttl=300, show_spinner=False)
 def cached_load(mode, model_version, local_altas=None):
-    if mode == "Google Sheets + Drive":
-        raw, fetched_at = load_sheets(st.secrets["gcp_service_account"])
-    else:
-        raw, fetched_at = load_local()
-        if local_altas:
-            altas = pd.read_csv(BytesIO(local_altas), dtype=str, keep_default_na=False)
-            missing = {"Usua_ID", "Alta"} - set(altas.columns)
-            if missing:
-                raise DataError(f"Faltan columnas en el CSV Usuario Alta: {', '.join(sorted(missing))}.")
-            raw["usuarios_alta"] = [["Usua_ID", "Alta"]] + altas[["Usua_ID", "Alta"]].values.tolist()
+    raw, fetched_at = load_local()
+    if local_altas:
+        altas = pd.read_csv(BytesIO(local_altas), dtype=str, keep_default_na=False)
+        missing = {"Usua_ID", "Alta"} - set(altas.columns)
+        if missing:
+            raise DataError(f"Faltan columnas en el CSV Usuario Alta: {', '.join(sorted(missing))}.")
+        raw["usuarios_alta"] = [["Usua_ID", "Alta"]] + altas[["Usua_ID", "Alta"]].values.tolist()
     return build_dataset(raw), fetched_at
-
-
-def credentials_available():
-    try:
-        return "gcp_service_account" in st.secrets
-    except (FileNotFoundError, st.errors.StreamlitSecretNotFoundError):
-        return False
 
 
 def source_controls(options, mode):
@@ -110,7 +100,7 @@ def source_controls(options, mode):
 with st.sidebar:
     st.markdown("### ◉ EdERSA")
     st.caption("EXPLORADOR DE USUARIOS")
-    options = (["Google Sheets + Drive"] if credentials_available() else []) + (["Copia de prueba"] if local_available() else [])
+    options = ["Copia publicada"] if local_available() else []
     if not options:
         st.info("Falta configurar el acceso a las fuentes.")
         st.markdown("Consultá la guía de conexión del proyecto.")
@@ -121,7 +111,7 @@ with st.sidebar:
         st.session_state["source_mode"] = mode
 
 local_altas = None
-if mode == "Copia de prueba":
+if mode == "Copia publicada":
     with st.sidebar:
         st.divider()
         st.caption("ANTIGÜEDAD · VISTA LOCAL")
@@ -131,7 +121,7 @@ if mode == "Copia de prueba":
 
 try:
     with st.spinner("Relacionando usuarios, barrios y consumos…"):
-        dataset, fetched_at = cached_load(mode, "survey-dni-link-v1", local_altas)
+        dataset, fetched_at = cached_load(mode, "survey-derived-link-v2", local_altas)
 except DataError as exc:
     source_controls(options, mode)
     st.error(str(exc))
@@ -139,8 +129,8 @@ except DataError as exc:
     st.stop()
 except Exception:
     source_controls(options, mode)
-    st.error("No se pudieron leer las fuentes. Revisá la conexión, las credenciales y que todos los archivos estén compartidos como lector con la cuenta de servicio. El Excel de soluciones requiere acceso a Google Drive API.")
-    st.info("La actualización no modifica las planillas. Podés volver a intentar con ‘Actualizar datos’.")
+    st.error("No se pudo leer la copia publicada. Revisá que el paquete de datos y el archivo de vínculos estén incluidos en la aplicación.")
+    st.info("Podés volver a intentar con ‘Actualizar datos’.")
     st.stop()
 
 u, c, interventions = dataset.users, dataset.consumption, dataset.interventions
@@ -564,7 +554,7 @@ else:
     - **Cruces de soluciones:** NIS exacto, Persona/Cuenta y corroboración con barrio. Conflictos y vínculos probables quedan pendientes. Nunca se identifica a un hogar solo por barrio.
     - **Encuestas:** la caracterización incluye todas las encuestas residenciales completas seleccionadas, también las que no tienen vínculo confirmado con el padrón. El vínculo se confirma por NIS o por un DNI único asociado al Usua_ID; identificadores contradictorios, documentos compartidos y barrios diferentes quedan sin asignar. Los DNI no se muestran ni se exportan. Sus filtros territoriales son independientes de los filtros de usuarios.
     """)
-    if mode == "Copia de prueba":
-        st.info("Esta vista usa una copia de revisión. Para recibir cambios de las fuentes, configurá la cuenta de servicio y seleccioná ‘Google Sheets + Drive’. No cambia automáticamente al modo online.")
+    if mode == "Copia publicada":
+        st.info("Esta vista usa una copia seleccionada y un archivo de vínculos derivado. Los DNI se procesan fuera de Streamlit y no forman parte de la aplicación publicada.")
 
-st.markdown(f'<div class="source-foot">EdERSA · Explorador de información · Lectura: {html.escape(str(fetched_at))} · {"Consulta a Sheets y Drive con caché de hasta 5 minutos; Actualizar datos fuerza una nueva lectura." if mode == "Google Sheets + Drive" else "Copia de prueba: los cambios en Drive no se sincronizan en este modo."}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="source-foot">EdERSA · Explorador de información · Lectura: {html.escape(str(fetched_at))} · Copia publicada: los cambios en Drive requieren regenerar y publicar el paquete.</div>', unsafe_allow_html=True)

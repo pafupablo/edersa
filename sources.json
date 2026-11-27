@@ -13,16 +13,6 @@
     "optional_local": true,
     "empty_headers": ["Usua_ID", "Alta"]
   },
-  "usuarios_documentos": {
-    "title": "Usuarios DNI",
-    "id": "1kGmmnEMW7fPIz9YiQ9GfVklMoDEDjIgdgeruTbViQm4",
-    "worksheet": "Hoja 1",
-    "range": "A:C",
-    "columns": ["Usua_ID", "DOC", "DOC N°"],
-    "private": true,
-    "optional_local": true,
-    "empty_headers": ["Usua_ID", "DOC", "DOC N°"]
-  },
   "consumo": {
     "title": "Consumo",
     "id": "15ydA2PnFiuIXnf80VYZlGY71ydfBTmpfS0IKsbuDnS0",
@@ -73,7 +63,6 @@
       "personas_mayores_edad_cantidad",
       "personas_menores_edad_cantidad",
       "numero_cliente_edersa",
-      "titular_servicio_dni",
       "superficie_construida",
       "ambientes_totales",
       "ambientes_dormir",
@@ -134,8 +123,7 @@
       "_submission__uuid",
       "_submission__id",
       "datos_encuestado_hay",
-      "nivel_educativo_alcanzado",
-      "encuestado_dni"
+      "nivel_educativo_alcanzado"
     ],
     "value_render_option": "UNFORMATTED_VALUE"
   }

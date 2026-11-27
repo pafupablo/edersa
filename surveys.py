@@ -10,6 +10,7 @@ SURVEY_FIELDS = [
 ]
 PERSON_FIELDS = ["genero", "edad_encuesta", "_submission__uuid", "_submission__id", "datos_encuestado_hay", "nivel_educativo_alcanzado", "encuestado_dni"]
 DOCUMENT_FIELDS = ["Usua_ID", "DOC", "DOC N°"]
+LINK_FIELDS = ["survey_uuid", "usuario_id", "vinculo_encuesta"]
 PROBLEMS = {
     "tienen_cables_a_la_vista": "Cables a la vista",
     "existen_corto_circuitos_sobrecarga": "Cortocircuitos o sobrecargas",
@@ -49,10 +50,11 @@ def document_id(value):
     return digits if 6 <= len(digits) <= 8 else ""
 
 
-def build_surveys(raw, people_raw, users, neighborhoods, documents_raw=None):
+def build_surveys(raw, people_raw, users, neighborhoods, documents_raw=None, links_raw=None):
     s = rows_frame(raw, SURVEY_FIELDS)
     p = rows_frame(people_raw, PERSON_FIELDS)
     documents = rows_frame(documents_raw or [], DOCUMENT_FIELDS)
+    derived_links = rows_frame(links_raw or [], LINK_FIELDS)
     s = s.loc[s._uuid.notna() & s._uuid.astype(str).str.strip().ne("")].copy()
     if s._uuid.duplicated().any():
         raise ValueError("Hay UUID de encuesta repetidos; revisar antes de caracterizar hogares.")
@@ -162,6 +164,19 @@ def build_surveys(raw, people_raw, users, neighborhoods, documents_raw=None):
             states.append(state)
     s["usuario_id"] = links
     s["vinculo_encuesta"] = states
+    if not derived_links.empty:
+        derived_links["survey_uuid"] = derived_links.survey_uuid.fillna("").astype(str).str.strip()
+        derived_links["usuario_id"] = derived_links.usuario_id.fillna("").astype(str).str.strip()
+        derived_links["vinculo_encuesta"] = derived_links.vinculo_encuesta.fillna("").astype(str).str.strip()
+        if derived_links.survey_uuid.eq("").any() or derived_links.survey_uuid.duplicated().any():
+            raise ValueError("Los vínculos derivados tienen UUID vacíos o repetidos.")
+        unknown_users = set(derived_links.loc[derived_links.usuario_id.ne(""), "usuario_id"]) - set(users_by_id)
+        if unknown_users:
+            raise ValueError("Los vínculos derivados contienen Usua_ID que no existen en el padrón.")
+        derived = derived_links.set_index("survey_uuid")
+        has_derived = s.survey_uuid.isin(derived.index)
+        s.loc[has_derived, "usuario_id"] = s.loc[has_derived, "survey_uuid"].map(derived.usuario_id)
+        s.loc[has_derived, "vinculo_encuesta"] = s.loc[has_derived, "survey_uuid"].map(derived.vinculo_encuesta)
     key = ["barrio_nombre", "manzana", "lote", "vivienda_n"]
     keys = s[key].astype("string").fillna("")
     s["ubicacion_repetida"] = keys.duplicated(keep=False) & keys.ne("").all(axis=1) & s.residencial

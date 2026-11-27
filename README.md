@@ -14,39 +14,29 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m streamlit run app.py --server.address 127.0.0.1
 ```
 
-La copia en `data/` sirve para revisar la aplicación con los datos leídos el 17/11/2026. Se muestra explícitamente como **Copia local**; no recibe cambios de Drive. Es privada, está ignorada por Git y no se incluye en el paquete de código para publicar. La consulta a Sheets online está implementada pero requiere configurar las credenciales siguientes.
+La aplicación publicada usa `trial_snapshot.zip`, una copia seleccionada que excluye DNI, nombres, teléfonos y correos. El vínculo entre encuesta y suministro se calcula fuera de Streamlit y se guarda en `survey_links.json`. Este archivo derivado contiene únicamente UUID de encuesta, `Usua_ID` y el estado del vínculo; nunca contiene números de documento.
 
-## Conectar los Sheets privados
+## Actualizar los vínculos privados
 
-1. Crear o seleccionar un proyecto en Google Cloud y habilitar **Google Sheets API** y **Google Drive API**. Esta solución no utiliza BigQuery ni necesita recursos de pago.
-2. Crear una cuenta de servicio para lectura y una clave JSON. Guardar esa clave de forma privada. No incluirla en GitHub ni enviarla por chat.
-3. Compartir los Sheets —incluido **Usuarios Alta**—, el Excel de soluciones y Formulario EdERSA como **Lector** con el `client_email` de esa cuenta. No hace falta hacer públicos los archivos ni convertir el Excel.
-4. Usar `.streamlit/secrets.toml.example` como guía y completar `[gcp_service_account]` con los datos de la clave. En local, guardarlo como `.streamlit/secrets.toml`. Online, pegarlo directamente en **Settings → Secrets** de Streamlit.
-5. Abrir la aplicación y elegir **Google Sheets + Drive**. Verificar los recuentos en **Fuentes y calidad**.
+El DNI se utiliza solamente durante el procesamiento privado para resolver qué encuesta corresponde a cada `Usua_ID`. Antes de publicar se descartan los documentos y se verifica que el resultado derivado no contenga columnas personales. Streamlit no se conecta a la planilla de DNI, no usa una cuenta de servicio y no necesita claves ni tokens.
 
-Los IDs, pestañas y columnas están en `sources.json`, ya configurados. La aplicación usa `spreadsheets.readonly` para las planillas nativas y `drive.readonly` para descargar el Excel. Solo tiene acceso a los archivos compartidos con la cuenta de servicio; no escribe ni cambia permisos. Las credenciales que usa Codex para revisar Drive no se transfieren a Streamlit.
-
-Se cachea cada lectura durante 5 minutos. **Actualizar datos**, al pie de la barra lateral, fuerza la lectura de las fuentes. No es sincronización continua en segundo plano. Si falla el acceso online, se informa el error y no se sustituye silenciosamente por la copia local.
-
-Guía oficial: https://docs.streamlit.io/develop/tutorials/databases/private-gsheet
+Cuando cambien las fuentes se debe regenerar la copia seleccionada y `survey_links.json`, ejecutar las pruebas y publicar ambos archivos juntos. **Actualizar datos** solo vuelve a leer los archivos incluidos en el despliegue; no consulta Google Drive.
 
 ## Publicar gratis en Streamlit Community Cloud
 
 1. Crear un repositorio **privado** en GitHub. Subir el contenido del paquete de código, conservando `.streamlit/config.toml`. No subir `data/`, entornos virtuales ni `secrets.toml`.
 2. Entrar en https://share.streamlit.io/ y vincular GitHub. La cuenta y las autorizaciones se completan desde el navegador del titular.
 3. Crear la aplicación desde ese repositorio: archivo principal `app.py`, Python 3.12.
-4. Configurar la sección Secrets con la cuenta de servicio antes del primer arranque.
-5. Mantener la aplicación privada y autorizar solo a los lectores del equipo. Verificar el acceso desde otra cuenta antes de compartir el enlace.
+4. No configurar credenciales de Google ni copiar documentos personales en Secrets.
+5. Verificar desde otra cuenta que las pantallas y descargas no muestren DNI.
 
-Community Cloud permite una aplicación privada por espacio y puede ponerla en reposo después de inactividad. El alojamiento tiene recursos limitados. Sheets también aplica cuotas: la caché evita repetir lecturas grandes por cada filtro.
-
-La publicación y la conexión en vivo requieren completar los pasos de cuenta y credenciales. La revisión local usa los datos reales; no equivale a una publicación online.
+Community Cloud puede poner la aplicación en reposo después de inactividad. El alojamiento tiene recursos limitados; el paquete publicado evita consultas externas durante el uso.
 
 ## Modelo y significado
 
 ## Caracterización de hogares
 
-Fuente: [Formulario EdERSA de producción](https://docs.google.com/spreadsheets/d/15ErlZXsZgrmHpKdeWLPDsgcI9A5AhqBjrUCFWmgAm5Q/edit). Se leen Relevamiento Producción y grupo_personas. Los DNI se leen transitoriamente solo para resolver el vínculo con Usua_ID, se normalizan en memoria y se eliminan antes de construir pantallas, descargas y controles. La selección excluye nombres, teléfonos, correos, fotografías, información de deuda e ingresos. El código admite columnas nuevas sin importar automáticamente campos personales.
+Fuente: Formulario EdERSA de producción. La copia publicada incluye solo las columnas necesarias de Relevamiento Producción y grupo_personas. Los DNI se procesan previamente en un entorno privado y no llegan a Streamlit; la aplicación recibe solamente el vínculo derivado con `Usua_ID`. La selección excluye nombres, teléfonos, correos, fotografías, información de deuda e ingresos.
 
 La sección tiene filtros propios por departamento, localidad, barrio y Tipo PASE, con manzana/lote y vínculo al padrón como opciones adicionales. Incluye hogares sin NIS para conservar la cobertura territorial. Se distinguen registros de campo, encuestas completas y encuestas residenciales de vivienda ocupada. La revisión del 17/11/2026 contiene 1.465 registros, 1.024 completas y 1.020 residenciales, con 3.258 personas declaradas.
 

@@ -1,5 +1,4 @@
-"""Lectura local para revisión y Google Sheets para la aplicación online."""
-from datetime import datetime, timezone
+"""Lectura del paquete publicado y sus vínculos derivados sin documentos."""
 import json
 from zipfile import ZipFile
 from pathlib import Path
@@ -17,6 +16,20 @@ def empty_optional_source(source):
     return [source.get("empty_headers", [])]
 
 
+def add_derived_links(raw):
+    """Adjunta vínculos ya resueltos sin cargar documentos personales."""
+    path = ROOT / "survey_links.json"
+    if not path.exists():
+        raw["survey_links"] = []
+        return raw
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    rows = payload.get("rows", [])
+    if not isinstance(rows, list):
+        raise ValueError("survey_links.json no contiene una tabla válida.")
+    raw["survey_links"] = rows
+    return raw
+
+
 def load_local():
     snapshot_zip = ROOT / "trial_snapshot.zip"
     if snapshot_zip.exists():
@@ -27,7 +40,7 @@ def load_local():
                 for key, source in SOURCES.items()
             }
             metadata = json.loads(archive.read("snapshot.json"))
-        return raw, metadata.get("fetched_at", "Copia de prueba sin fecha")
+        return add_derived_links(raw), metadata.get("fetched_at", "Copia de prueba sin fecha")
     raw = {
         key: json.loads((ROOT / "data" / f"{key}.json").read_text(encoding="utf-8"))
         if (ROOT / "data" / f"{key}.json").exists() else empty_optional_source(source)
@@ -35,41 +48,4 @@ def load_local():
     }
     metadata_path = ROOT / "data" / "snapshot.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
-    return raw, metadata.get("fetched_at", "Copia local sin fecha")
-
-
-def load_sheets(service_account):
-    import gspread
-    from google.oauth2.service_account import Credentials
-
-    credentials = Credentials.from_service_account_info(dict(service_account), scopes=["https://www.googleapis.com/auth/spreadsheets.readonly", "https://www.googleapis.com/auth/drive.readonly"])
-    client = gspread.authorize(credentials)
-    raw = {}
-    for key, source in SOURCES.items():
-        if source.get("kind") == "excel":
-            from google.auth.transport.requests import AuthorizedSession
-            from interventions import read_workbook
-            with AuthorizedSession(credentials) as session:
-                response = session.get(f"https://www.googleapis.com/drive/v3/files/{source['id']}", params={"alt": "media"}, timeout=90)
-                response.raise_for_status()
-                raw[key] = read_workbook(response.content)
-            continue
-        worksheet = client.open_by_key(source["id"]).worksheet(source["worksheet"])
-        # FORMATTED_VALUE preserva oct-24: el serial subyacente no representa el año mostrado.
-        render = source.get("value_render_option", "FORMATTED_VALUE")
-        if source.get("ranges"):
-            parts = worksheet.batch_get(source["ranges"], value_render_option=render)
-            row_count = max((len(part) for part in parts), default=0)
-            values = []
-            for row_index in range(row_count):
-                row = []
-                for part in parts:
-                    row.extend(part[row_index] if row_index < len(part) else [])
-                values.append(row)
-        else:
-            values = worksheet.get(source["range"], value_render_option=render)
-        if source.get("columns") and values:
-            indexes = [values[0].index(name) for name in source["columns"] if name in values[0]]
-            values = [[row[i] if i < len(row) else None for i in indexes] for row in values]
-        raw[key] = values
-    return raw, datetime.now(timezone.utc).isoformat()
+    return add_derived_links(raw), metadata.get("fetched_at", "Copia local sin fecha")

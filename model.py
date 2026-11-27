@@ -328,7 +328,14 @@ def build_dataset(raw):
         {"Control": "Filas sin solución especificada", "Cantidad": len(incomplete), "Criterio": "Se conservan para revisar; no se contabilizan como intervenciones."},
         {"Control": "Registros de intervención duplicados exactos", "Cantidad": int(events.duplicado_exacto.sum()), "Criterio": "Se conservan para auditar; no se cuentan dos veces en el usuario."},
     ])], ignore_index=True)
-    surveys = build_surveys(raw.get("encuestas", []), raw.get("personas", []), u, b, raw.get("usuarios_documentos", []))
+    surveys = build_surveys(
+        raw.get("encuestas", []),
+        raw.get("personas", []),
+        u,
+        b,
+        raw.get("usuarios_documentos", []),
+        raw.get("survey_links", []),
+    )
     counts["encuestas"] = len(surveys.records)
     counts["personas"] = len(surveys.people)
     residential_surveys = surveys.records.loc[surveys.records.residencial]
