@@ -24,6 +24,11 @@ class PublishedPrivacyTests(unittest.TestCase):
                 headers = {str(value).casefold() for value in rows[0]}
                 self.assertFalse(any("dni" in header or header.startswith("doc") for header in headers))
 
+    def test_published_app_has_no_manual_source_uploads(self):
+        app_source = (ROOT / "app.py").read_text(encoding="utf-8")
+        self.assertNotIn("st.file_uploader", app_source)
+        self.assertNotIn("Usuario Alta · CSV", app_source)
+
 
 if __name__ == "__main__":
     unittest.main()

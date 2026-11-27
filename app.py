@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import html
-from io import BytesIO
 import json
 from pathlib import Path
 import pandas as pd
@@ -76,14 +75,8 @@ def chart(fig, key=None, height=320, top_margin=15, plot_background="rgba(0,0,0,
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def cached_load(mode, model_version, local_altas=None):
+def cached_load(mode, model_version):
     raw, fetched_at = load_local()
-    if local_altas:
-        altas = pd.read_csv(BytesIO(local_altas), dtype=str, keep_default_na=False)
-        missing = {"Usua_ID", "Alta"} - set(altas.columns)
-        if missing:
-            raise DataError(f"Faltan columnas en el CSV Usuario Alta: {', '.join(sorted(missing))}.")
-        raw["usuarios_alta"] = [["Usua_ID", "Alta"]] + altas[["Usua_ID", "Alta"]].values.tolist()
     return build_dataset(raw), fetched_at
 
 
@@ -110,18 +103,9 @@ with st.sidebar:
         mode = options[0]
         st.session_state["source_mode"] = mode
 
-local_altas = None
-if mode == "Copia publicada":
-    with st.sidebar:
-        st.divider()
-        st.caption("ANTIGÜEDAD · VISTA LOCAL")
-        altas_file = st.file_uploader("Usuario Alta · CSV", type=["csv"], help="Descargá como CSV la hoja Usuario Alta y cargala aquí. El archivo se usa solo en esta sesión y no se agrega a Git.")
-        if altas_file is not None:
-            local_altas = altas_file.getvalue()
-
 try:
     with st.spinner("Relacionando usuarios, barrios y consumos…"):
-        dataset, fetched_at = cached_load(mode, "survey-derived-link-v2", local_altas)
+        dataset, fetched_at = cached_load(mode, "survey-derived-link-v3")
 except DataError as exc:
     source_controls(options, mode)
     st.error(str(exc))
@@ -287,20 +271,20 @@ if section == "Panorama":
     e.metric("Consumo mediano · último período", fmt(latest_c.consumo.median(), 2), help="Mediana entre usuarios con consumo ≥100; se excluyen faltantes y valores menores a 100.")
     st.caption(f"Período consumido: {label_period(latest)} · Cobertura estadística: {fmt(100 * latest_c.usuario_id.nunique() / len(filtered), 2)}% · Mediciones de consumo menores a 100 excluidas: {fmt(latest_raw.consumo.lt(100).sum())}.")
     st.caption(f"En la selección: {fmt(filtered.intervenciones_registros.gt(0).sum())} usuarios con registros de soluciones vinculados y {fmt(filtered.intervenciones_ejecutadas.gt(0).sum())} con ejecución marcada ‘sí’ en alguna fecha. Sin registro no equivale a ausencia de intervención.")
-    st.markdown("#### Antigüedad de usuarios · último bimestre")
     known_dates = tenure_snapshot.fecha_alta.notna()
-    period_end = latest + pd.DateOffset(months=2) - pd.Timedelta(days=1)
-    known_as_of = known_dates & tenure_snapshot.fecha_alta.le(period_end)
-    recent = int(tenure_snapshot.alta_en_ultimo_bimestre.sum())
-    median_tenure = tenure_snapshot.loc[known_as_of, "antiguedad_meses"].median()
-    a, b, c, d = st.columns(4)
-    a.metric("Altas en el último bimestre", fmt(recent), help=f"Fecha de alta entre el inicio y el cierre de {label_period(latest)}.")
-    b.metric("Participación de altas recientes", f"{fmt(recent / known_as_of.sum() * 100, 2)}%" if known_as_of.any() else "Sin base", help="Altas del último bimestre sobre usuarios con fecha conocida y vigentes al cierre del período.")
-    c.metric("Antigüedad mediana al cierre", format_tenure(median_tenure), help="Mediana de meses completos desde el alta hasta el cierre del último bimestre.")
-    d.metric("Fecha de alta disponible", fmt(known_dates.sum()), delta=f"{fmt(known_dates.mean() * 100 if len(tenure_snapshot) else float('nan'), 2)}% de la selección", delta_color="off")
-    tenure_counts = tenure_snapshot.groupby("antiguedad_grupo", observed=False).size().reindex(USER_TENURE_ORDER, fill_value=0).rename("Usuarios").reset_index()
-    tenure_counts = tenure_counts.loc[tenure_counts.Usuarios.gt(0)]
     if known_dates.any():
+        st.markdown("#### Antigüedad de usuarios · último bimestre")
+        period_end = latest + pd.DateOffset(months=2) - pd.Timedelta(days=1)
+        known_as_of = known_dates & tenure_snapshot.fecha_alta.le(period_end)
+        recent = int(tenure_snapshot.alta_en_ultimo_bimestre.sum())
+        median_tenure = tenure_snapshot.loc[known_as_of, "antiguedad_meses"].median()
+        a, b, c, d = st.columns(4)
+        a.metric("Altas en el último bimestre", fmt(recent), help=f"Fecha de alta entre el inicio y el cierre de {label_period(latest)}.")
+        b.metric("Participación de altas recientes", f"{fmt(recent / known_as_of.sum() * 100, 2)}%" if known_as_of.any() else "Sin base", help="Altas del último bimestre sobre usuarios con fecha conocida y vigentes al cierre del período.")
+        c.metric("Antigüedad mediana al cierre", format_tenure(median_tenure), help="Mediana de meses completos desde el alta hasta el cierre del último bimestre.")
+        d.metric("Fecha de alta disponible", fmt(known_dates.sum()), delta=f"{fmt(known_dates.mean() * 100 if len(tenure_snapshot) else float('nan'), 2)}% de la selección", delta_color="off")
+        tenure_counts = tenure_snapshot.groupby("antiguedad_grupo", observed=False).size().reindex(USER_TENURE_ORDER, fill_value=0).rename("Usuarios").reset_index()
+        tenure_counts = tenure_counts.loc[tenure_counts.Usuarios.gt(0)]
         tenure_colors = {"Alta en último bimestre":"#FFC600", "Alta posterior al período":"#B7474C", "Sin fecha de alta":"#CFD9E6"}
         fig = px.bar(tenure_counts, y="antiguedad_grupo", x="Usuarios", orientation="h", color="antiguedad_grupo", color_discrete_map=tenure_colors, text="Usuarios", labels={"antiguedad_grupo":"", "Usuarios":"Usuarios"})
         fig.update_traces(textposition="outside", texttemplate="%{x:,.0f}", cliponaxis=False)
@@ -308,8 +292,6 @@ if section == "Panorama":
         chart(fig, "user_tenure_latest_period", height=380)
         future = int(tenure_snapshot.fecha_alta.gt(period_end).sum())
         st.caption(f"Referencia: cierre de {label_period(latest)} ({period_end:%d/%m/%Y}). Las altas posteriores al cierre ({fmt(future)}) se muestran aparte y no reciben antigüedad en ese período. Los faltantes no se estiman.")
-    else:
-        st.info("La copia local no incluye fechas de alta. Para revisar este indicador antes de publicar, descargá la hoja ‘Usuarios alta’ como CSV y cargala en el control de la izquierda.")
     st.markdown("#### Evolución del consumo · mediana y media")
     if selected_c.empty:
         st.info("No hay consumos ≥100 para la selección y la ventana elegida.")
